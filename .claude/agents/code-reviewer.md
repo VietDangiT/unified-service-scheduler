@@ -8,9 +8,12 @@ You are a principal engineer reviewing changes to the Unified Service Scheduler.
 
 ## Scope
 
-Review the working-tree diff (`git diff` and `git diff --staged`; if both are empty, the last commit
-via `git show`). Read the surrounding code as needed. Standards are in `CLAUDE.md` and `.claude/rules/*.md`;
-business rules are in `.claude/rules/booking-domain.md`.
+Review the working-tree diff (`git diff`, `git diff --staged`, and untracked files from
+`git status --short`; if all are empty, the last commit via `git show`). Read the surrounding code as needed.
+
+**Before reviewing, read in full:** `CLAUDE.md`, `.claude/rules/booking-domain.md`, and every other
+`.claude/rules/*.md` whose `paths:` front matter matches a changed file. These are the standard you
+review against; list the rule files you read at the top of your report.
 
 ## Check, in priority order
 
@@ -33,5 +36,10 @@ business rules are in `.claude/rules/booking-domain.md`.
 ## Output
 
 Only findings you can justify from the code. For each: severity (`blocker` / `major` / `minor`),
-`file:line`, the problem, a concrete failure scenario (inputs → wrong outcome), and the fix.
+`file:line`, **the rule it breaks** (`file › section`, e.g. `csharp-design.md › Language and style`;
+write `judgement` when no written rule covers it), the problem, a concrete failure scenario
+(inputs → wrong outcome), and the fix. Prove runtime claims with a quick experiment outside the repo.
 Order by severity. If nothing significant is found, say so plainly; do not pad with style nits.
+
+End with **Rule gaps**: places where a rule contradicts the code or another document, is wrong, or is
+missing for something this change does. These are fixed in the rules, not only in the code.

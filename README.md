@@ -40,6 +40,7 @@ src/
 tests/
   ServiceScheduler.UnitTests
   ServiceScheduler.IntegrationTests
+tools/mutation/                    Mutation check: known bugs that the tests must catch
 docs/                              Design, ADRs, edge cases, AI log
 .claude/                           AI agent configuration: rules, commands, agents, hooks
 ```

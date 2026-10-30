@@ -64,7 +64,11 @@ Detailed, path-scoped rules live in `.claude/rules/` and load automatically for 
 1. **Plan first** for anything beyond a trivial edit: state the approach, the files affected and the
    edge cases from `docs/edge-cases.md` it covers. Wait for approval before writing code.
 2. **TDD:** write the failing test, run it red, implement the minimum to pass, refactor.
+   At the start of each step, run the `domain-analyst` agent to derive the business scenarios to test;
+   the developer decides its open questions before tests are written.
 3. **Verify before claiming done:** run `/verify`. Never report success with a failing build or test.
+   **Before every commit**, also run the `code-reviewer` agent on the diff and resolve or explicitly
+   defer every `blocker` and `major` finding. Report what it found, even when nothing was found.
 4. **Ask before:** adding a NuGet package, changing the public API contract, editing an applied
    migration, or weakening any invariant above.
 5. **Keep docs in sync:** a changed decision updates its ADR and `docs/system-design.md` in the same change.

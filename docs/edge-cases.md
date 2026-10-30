@@ -33,25 +33,29 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-03 | Service would end after closing time | `422 OutsideOpeningHours` | Unit | TBD |
-| EC-09 | Requested start in the past | `422 StartInPast` | Unit | TBD |
-| EC-10 | Requested start not on the 15-minute grid (10:10) | `422 StartNotOnGrid` | Unit | TBD |
+| EC-03 | Service does not fit inside that day's opening hours (ends after closing, starts before opening, longer than the day, or runs past local midnight) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenServiceDoesNotFitOpeningHours_…`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…`, `…_WhenServiceTouchesOpeningOrClosingTime_IsAccepted`, `…_DuringSummerTime_…` (2), `…_AucklandMondayMorning_IsBookable`, `…_AucklandSundayMorning_IsClosed`, `…_WhenAucklandServiceRunsPastLocalMidnight_…`, `WeeklyScheduleTests` |
+| EC-09 | Requested start is now or earlier (compared as instants) | `422 StartInPast` | Unit | `BookingValidatorTests.Validate_WhenStartIsNowOrEarlier_ReturnsStartInPast`, `…_WhenAucklandMorningIsAlreadyOverInLondon_ReturnsStartInPast` |
+| EC-10 | Requested start not on the dealership's 15-minute grid (10:10; or 10:00+00:10 = 09:50 local) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartIsBetweenQuarterHours_…`, `…_WhenRequestOffsetHidesAnOffGridLocalTime_…` |
 | EC-19 | Unknown customer / vehicle / service type / dealership | `404` | Integration | TBD |
-| EC-20 | Vehicle does not belong to the customer | `422 VehicleNotOwnedByCustomer` | Unit | TBD |
+| EC-20 | Vehicle does not belong to the customer | `422 VehicleNotOwnedByCustomer` | Unit | `BookingValidatorTests.Validate_WhenVehicleBelongsToAnotherCustomer_ReturnsVehicleNotOwnedByCustomer` |
 | EC-30 | `requestedStart` without an offset (`2026-11-03T10:00:00`) | `400` | Integration | TBD |
-| EC-31 | `requestedStart` with seconds or milliseconds (`10:00:30`) | `422 StartNotOnGrid` | Unit | TBD |
+| EC-31 | `requestedStart` with seconds or milliseconds (`10:00:30`) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartHasSecondsOrMilliseconds_ReturnsStartNotOnGrid` |
 | EC-32 | `requestedStart` beyond the 90-day horizon | `422 BeyondBookingHorizon` | Unit | TBD |
-| EC-33 | Dealership closed that weekday (no opening-hours row) | `422 OutsideOpeningHours` | Unit | TBD |
-| EC-34 | Request violates several rules at once (past **and** off-grid) | First error in the documented order (`StartInPast`) | Unit | TBD |
+| EC-33 | Dealership closed that weekday (no opening-hours row) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenDealershipIsClosedThatWeekday_ReturnsOutsideOpeningHours` |
+| EC-34 | Request violates several rules at once (past **and** off-grid) | First error in the documented order (`StartInPast`) | Unit | `BookingValidatorTests.Validate_WhenStartIsInPastAndOffGrid_ReturnsStartInPast`, `Validate_WhenVehicleNotOwnedAndStartInPast_…`, `Validate_WhenStartIsOffGridAndBeforeOpening_ReturnsStartNotOnGrid` (extended as rules 3, 5, 8, 9 are added) |
 | EC-35 | `Idempotency-Key` empty or longer than 64 characters | `400` | Integration | TBD |
+| EC-58 | Same-day walk-in: at 09:00 the advisor books 09:15 (or 14:00) today | Accepted; no minimum notice (ADR-0002 #14) | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
+| EC-59 | Quarter-hour starts 10:15, 10:30, 10:45 | Accepted (grid is 15 minutes, not hourly) | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
+| EC-60 | Saturday half-day: 12:00 for 60 min accepted; 08:30 rejected (Saturday opens 09:00) | Accepted / `422 OutsideOpeningHours` | Unit | `…_WhenBookingFollowsEveryRule_IsAccepted`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…` |
+| EC-61 | Far-from-UTC dealership: Auckland Tue 12:30–13:30 local crosses UTC midnight but not local midnight | Accepted | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
 
 ## Time zones and daylight saving
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-11 | Request sent with the wrong offset (`10:00+00:00` for London during BST) | Valid instant; booked at 11:00 local; response `localStart` shows 11:00 | Unit | TBD |
+| EC-11 | Request sent in another offset (`07:30+00:00` in BST = 08:30 London; `17:30+00:00` = 18:30) | The instant counts: 08:30 accepted, 18:30 `422 OutsideOpeningHours`; response `localStart` shows local time | Unit (+ API for `localStart`) | Validation: `…_WhenBookingFollowsEveryRule_IsAccepted`, `…_WhenUtcTimeIsAfterClosingInLocalSummerTime_…`. `localStart`: TBD |
 | EC-12 | Booking on a DST transition day | End = start + duration in elapsed (UTC) time | Unit | TBD |
-| EC-36 | Opening hours or shift on a DST transition day (08:00–17:00 local = 8 or 10 elapsed hours) | Fit is evaluated on the real interval | Unit | TBD |
+| EC-36 | Opening hours or shift spanning a DST change (London 00:00–06:00 on 2027-03-28 = 5 elapsed hours) | Fit is evaluated on the real interval | Unit | TBD |
 | EC-37 | Availability on a DST transition day | No duplicated or missing slot | Unit | TBD |
 
 ## Alternatives on a capacity error
@@ -107,4 +111,16 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-57 | Opening hours or shift with `closes ≤ opens` or `24:00` | Rejected by a `CHECK` constraint | Integration | TBD |
+| EC-57 | Opening hours or shift with `closes ≤ opens` or `24:00` | Rejected by a `CHECK` constraint (and by `LocalTimeRange` in the domain) | Unit + Integration | Unit: `LocalTimeRangeTests.Constructor_WhenEndIsNotAfterStart_Throws`. Integration: TBD |
+
+## Deferred (known gaps, scheduled)
+
+Findings from the step 2 code review that were consciously postponed, with where they will be handled.
+
+| Gap | Planned in |
+|---|---|
+| DST transition-day tests (EC-12, EC-36, EC-37): need Sunday opening hours via `DealershipBuilder.OpenOn` and explicit-offset starts | "Later" step (DST) |
+| Opening hours spanning a repeated local hour (clocks going back) can be misjudged because only the two ends are checked; decide "first occurrence" policy and record it in an ADR | "Later" step (DST) |
+| `BookingRequest` carries a bare duration; rule 3 needs `ServiceType`, bays and technicians; `Dealership` should compare by `Id`; validator should call `Dealership.IsOpenFor(slot)` (as designed) instead of passing the zone to `OpeningHours.Covers` | Step 3 |
+| EF Core mapping for `TimeZoneInfo` (IANA ID converter) and `WeeklySchedule`; decide whether to wrap it in the `DealershipTimeZone` value object that `architecture.md` lists | Step 4 |
+| Time-zone data (ICU / tzdata) required in CI and Docker images; tests resolve IANA zones | Step 4 |

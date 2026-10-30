@@ -11,7 +11,9 @@ Run the quality gate for this repository and report the outcome.
    `dotnet test tests/ServiceScheduler.IntegrationTests --no-build -nologo`; if not, say integration
    tests were **skipped** and why. Never present skipped tests as passed.
 4. `dotnet format ServiceScheduler.slnx --verify-no-changes`.
+5. If steps 1–4 pass and there are uncommitted changes, run the `code-reviewer` agent on the diff.
 
-Report as a short table: step, result (pass / fail / skipped), and the key numbers (tests passed/failed).
+Report as a short table: step, result (pass / fail / skipped), and the key numbers (tests passed/failed,
+review findings by severity).
 For any failure, quote the first relevant error lines and state the most likely cause. Do not fix
 anything unless the user asks. $ARGUMENTS

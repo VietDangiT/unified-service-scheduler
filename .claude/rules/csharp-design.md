@@ -30,7 +30,7 @@ than a little duplication. Test code may repeat setup for readability; use build
 | Strategy | `IBayAllocationPolicy`, `ITechnicianAllocationPolicy` | Allocation rules can vary without touching the booking flow |
 | Repository + Unit of Work | Ports in Application, EF Core in Infrastructure | Aggregate persistence without leaking EF Core |
 | Factory method | `Appointment.Book(...)`, value-object `Create(...)` | Objects are valid from construction |
-| Options | `IOptions<BookingOptions>` | Grid size, retry count, buffers are configuration |
+| Options | `IOptions<BookingOptions>` | Retry count, alternatives and horizon are configuration; the 15-minute grid is a domain constant (ADR-0002 #7) |
 | Decorator (if needed) | Cross-cutting concerns around handlers | Keep handlers single-purpose |
 
 ## Language and style
@@ -47,5 +47,6 @@ than a little duplication. Test code may repeat setup for readability; use build
 - Methods short enough to read without scrolling. Extract when a comment would otherwise explain a block.
 - Comments explain *why*, never *what*. Public types in Domain and Application get XML docs only when the
   name is not self-explanatory.
-- `DateTime` never appears in Domain; use `DateTimeOffset` (UTC) and `TimeProvider`.
+- `DateTime` never appears in Domain; use `DateTimeOffset` (UTC) for instants, `TimeOnly`/`DateOnly` for
+  wall-clock values, and take `now` as a parameter (see `async-concurrency.md › Time`).
 - Collections: avoid multiple enumeration of `IEnumerable<T>`; materialise once when needed.
