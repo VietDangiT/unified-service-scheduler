@@ -31,7 +31,13 @@ starts with a test that reproduces the bug.
 - Arrange / Act / Assert, separated by a blank line. One behaviour per test.
 - Test data via builders with sensible defaults (`AppointmentRequestBuilder.Default().At("10:00")`);
   a test states only the values that matter to it.
-- Time is controlled with `FakeTimeProvider`. No `DateTime.Now`, no `Thread.Sleep`, no `Task.Delay` for synchronisation.
+- Time is controlled with `FakeTimeProvider` (Application and integration tests) or a fixed `now`
+  argument (Domain tests). No `DateTime.Now`, no `Thread.Sleep`, no `Task.Delay` for synchronisation.
+- A test's `now` must keep its requests inside the booking horizon unless the horizon is what it tests.
+- Accepted cases need as much variety as rejected ones (same day, every quarter-hour, each weekday's
+  hours, far-from-UTC zones); a rule that is too strict loses business just as a lax one causes errors.
+- Mutation check: `tools/mutation/mutate.ps1` injects known bugs into a copy of the repo; every one
+  must be caught. Add a mutation when you add a rule.
 - Use `[Theory]` for boundary tables (back-to-back, touching edges, DST dates).
 - Tests are independent and order-agnostic; each integration test resets data (Respawn or a fresh schema).
 - Assertions use xUnit `Assert` (or Shouldly if approved). Do not use FluentAssertions v8+ (commercial licence).

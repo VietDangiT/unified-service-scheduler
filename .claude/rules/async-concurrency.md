@@ -47,4 +47,5 @@ Never "fix" a race with `lock`, `SemaphoreSlim`, a `static` flag, `Thread.Sleep`
 ## Time
 
 Inject `TimeProvider`; never call `DateTime.Now`, `DateTime.UtcNow` or `DateTimeOffset.Now` directly.
-Tests use `FakeTimeProvider`.
+Tests use `FakeTimeProvider`. The Domain stays pure: domain methods take `DateTimeOffset now` as a
+parameter, and Application supplies `timeProvider.GetUtcNow()`; domain tests pass fixed instants.

@@ -29,6 +29,8 @@ unified-service-scheduler/
 ├── tests/
 │   ├── ServiceScheduler.UnitTests
 │   └── ServiceScheduler.IntegrationTests
+├── tools/
+│   └── mutation/mutate.ps1       Injects known bugs into a temp copy; every one must fail a test
 │
 ├── docs/
 │   ├── system-design.md          The design document required by the brief
@@ -41,7 +43,7 @@ unified-service-scheduler/
     ├── settings.json             Permissions and hooks
     ├── rules/                    Engineering standards, loaded by folder
     ├── commands/                 Slash commands: /verify, /tdd, /ai-log
-    ├── agents/                   Review subagents
+    ├── agents/                   Review subagents: domain-analyst, code-reviewer, test-auditor
     └── hooks/                    Scripts that run automatically on AI actions
 ```
 
@@ -171,10 +173,13 @@ Each file starts with a `paths:` header listing the folders it applies to.
 
 ### `.claude/agents/`
 
-Both agents review and report; neither edits files.
+All agents review and report; none edits files. Together they answer three different questions:
+*what should be tested* (domain-analyst), *is the new code correct* (code-reviewer) and *would the
+tests catch a broken rule* (test-auditor, backed by mutation testing).
 
 | Agent | Use it | Checks |
 |---|---|---|
+| `domain-analyst` | At the start of each step, before writing tests | Thinks like a service advisor and workshop manager: derives Given/When/Then business scenarios (boundaries, real counter situations, rule combinations), separates agreed outcomes from open questions, and checks tests read as business rules |
 | `code-reviewer` | After a feature, before committing | Booking invariants → concurrency → data access (N+1) → async → layering → error handling → missing tests. Each finding has severity, `file:line`, a failure scenario and a fix |
 | `test-auditor` | After a batch of tests | Maps every row of `edge-cases.md` to real tests and asks "would this test fail if the rule were broken?" Reports covered / weak / missing |
 
