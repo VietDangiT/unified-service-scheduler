@@ -45,7 +45,7 @@ interval so buffers slot in later), cancellation, idempotency, DST transition da
 | EC-06 | EV job, bay free, EV technician busy, General-only free | `NoQualifiedTechnicianAvailable` |
 | EC-65 | No technician and no bay free | `NoQualifiedTechnicianAvailable` (ADR #17) |
 | EC-63 | Inactive technician/bay that would otherwise win | Never chosen |
-| EC-64 | Free technician/bay from another dealership among candidates | Never chosen |
+| EC-64 | Technician/bay of another dealership passed to `Dealership` | Rejected at construction (ADR #21) |
 | EC-07 | Standard job, Standard and EV bays free | Standard bay |
 | EC-66 | Standard job, no Standard free; Lift, Alignment, EV free | Lift; EV only as last resort (ADR #18) |
 | EC-67 | Two equally specialised bays free | Lower bay ID |
@@ -71,9 +71,27 @@ Assertions name the chosen technician and bay IDs, or the exact `DomainError`.
 1. Technician busy intervals ignored. 2. Bay busy intervals ignored. 3. Shift check tests only the start.
 4. `Standard` job requires an exact `Standard` bay. 5. Specialised job accepts any bay type.
 6. Bay order `EV` before `Lift`. 7. Workload compared before skill count. 8. Inactive filter removed.
-9. Dealership filter removed. 10. Bay error returned when both are missing. 11. Rule 3 after `StartInPast`.
+9. `Dealership` accepts a resource of another dealership. 10. Bay error returned when both are missing. 11. Rule 3 after `StartInPast`.
 12. Rule 3 counts inactive resources. 13. Workload uses the UTC date. 14. ID tie-break reversed.
 
 ## Approved extras
 
 None: no NuGet packages, no API contract change.
+
+## Revision 1 (red), from the `domain-analyst` check of the red tests
+
+Developer decisions on 2026-10-30: keep the Strategy design (`IBayAllocationPolicy` /
+`ITechnicianAllocationPolicy`) as in `docs/system-design.md`; foreign resources are rejected by the
+`Dealership` aggregate (ADR-0002 #21). Changes to the red tests (not yet approved, so still editable):
+
+1. EC-64: delete the two allocator tests for another dealership's technician/bay; add two `Dealership`
+   construction tests (foreign technician, foreign bay → `ArgumentException`) in
+   `tests/ServiceScheduler.UnitTests/Domain/Dealerships/DealershipTests.cs`.
+2. EC-29 `…DifferentSkillsOfEqualCount…`: book 60 min on the `{General, Alignment}` technician (ID 1) and
+   expect the idle `{General, EV}` technician (ID 2), so only "equal count, then workload" passes.
+3. EC-68: the generalist's 6 h as one block 12:00–18:00 (not touching the 10:00–11:00 request).
+4. Add the order test: vehicle not owned **and** service not offered → `VehicleNotOwnedByCustomer` (rule 2 before 3).
+5. Renames in business language: `…JobsAreBackToBack…` (technician and bay), `…HasAnOverlappingJob…`
+   (technician and bay), `…StartsAtShiftStartOrEndsAtShiftEnd…`,
+   `…WhenEvAndAlignmentTechniciansAreFree_ChoosesTheLessBookedOne`,
+   `…CountsOnlyThatLocalWorkingDaysBookingsAsWorkload`, `…WhenBookingIsBeforeOpeningButInsideTechniciansShift…`.

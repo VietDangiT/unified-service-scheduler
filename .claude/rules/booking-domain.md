@@ -54,6 +54,8 @@ Evaluated **in this order**; the first failure is returned, so the same input al
 - **Bay is eligible** when: belongs to the dealership, is active, its `BayType` satisfies
   `serviceType.RequiredBayType`, and has no overlapping confirmed blocked interval.
   Compatibility: a `Standard` job can use any bay type; `Lift`, `EV` and `Alignment` jobs need a bay of that exact type.
+- "Belongs to the dealership" holds by construction: the `Dealership` aggregate rejects a technician or
+  bay of another dealership (ADR-0002 #21), so rule 3 and the allocator do not filter for it.
 - The job must fit inside **both** opening hours and the shift; a shift that extends beyond opening hours
   does not extend the bookable window.
 

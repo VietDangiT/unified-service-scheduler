@@ -343,8 +343,8 @@ classDiagram
         <<enumeration>>
         Standard
         Lift
-        EV
         Alignment
+        EV
     }
 
     class Skill {
@@ -373,6 +373,7 @@ classDiagram
     class BestFitTechnicianPolicy {
         fewest skills, then least loaded, then ID
     }
+    note for BayType "Declared in specialisation order (ADR-0002 #18)"
 
     class Allocation {
         <<Value Object>>

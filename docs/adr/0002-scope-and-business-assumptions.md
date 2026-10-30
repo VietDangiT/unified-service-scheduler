@@ -1,6 +1,6 @@
 # ADR-0002: Scope and business assumptions
 
-- **Status:** Accepted, provisionally (rows 1–13 confirmed by the developer on 2026-10-30; rows 14–20
+- **Status:** Accepted, provisionally (rows 1–13 confirmed by the developer on 2026-10-30; rows 14–21
   decided by the developer on 2026-10-30 from questions raised by the `domain-analyst` agent). To be
   revisited once the test suite and demo run against them; any change follows the process under *Consequences*
 - **Date:** 2026-10-30
@@ -33,6 +33,7 @@ The brief is deliberately ambiguous. These assumptions turn it into a buildable,
 | 18 | Which specialised bay a `Standard` job uses when no `Standard` bay is free | Fixed specialisation order `Standard < Lift < Alignment < EV`; take the least specialised free bay, then lowest ID | Deterministic and explainable; keeps the scarcest, most specialised bay (EV) for the jobs only it can do |
 | 19 | Skilled, active technician with no shift on any weekday | Still counts as "offered" for rule 3 (active + skill only); bookings get `409 NoQualifiedTechnicianAvailable` | Keeps rule 3 a static capability check; a technician with no shifts is a reference-data problem for the DMS sync to flag |
 | 20 | What "least loaded" measures | Blocked minutes (service + buffer) of `Confirmed` appointments on the dealership's local date | The technician is occupied during clean-up; identical to service minutes while buffers are 0 |
+| 21 | A dealership's technician or bay list contains a resource of another dealership (bad reference data) | Rejected when the `Dealership` aggregate is built (programming/data error, fails loudly); rule 3 and the allocator need no filter | The impossible state cannot exist, so "not offered" (422) and "fully booked" (409) can never disagree; the composite foreign key (EC-46) is the database backstop |
 
 ## Consequences
 

@@ -17,7 +17,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | EC-23 | Technician has no shift on that weekday (only qualified technician, Saturday) | Not eligible → `409 NoQualifiedTechnicianAvailable` | Unit | TBD |
 | EC-62 | Standard job at a dealership with only Lift and EV bays | Service is offered (no 422); a Lift bay is used | Unit | TBD |
 | EC-63 | An inactive technician or bay that would otherwise win (fewer skills, lower ID) | Never chosen | Unit | TBD |
-| EC-64 | A free technician or bay from another dealership is among the candidates | Never chosen (EC-46 is the database backstop) | Unit | TBD |
+| EC-64 | A technician or bay of another dealership is passed to the `Dealership` aggregate | Rejected at construction (ADR-0002 #21), so it can never be chosen; EC-46 is the database backstop | Unit | TBD |
 | EC-65 | Neither a qualified technician nor a compatible bay is free | `409 NoQualifiedTechnicianAvailable` (ADR-0002 #17) | Unit | TBD |
 | EC-69 | Skilled, active technician with no shift on any weekday | Service still offered; booking gets `409 NoQualifiedTechnicianAvailable` (ADR-0002 #19) | Unit | TBD |
 | EC-24 | Shift extends beyond opening hours (07:00–19:00 vs 08:00–18:00), request at 07:30 | `422 OutsideOpeningHours`: the job must fit both | Unit | TBD |
