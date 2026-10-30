@@ -1,0 +1,5 @@
+* text=auto
+
+# Scripts must keep LF so they run in bash/Node on every OS
+*.sh  text eol=lf
+*.mjs text eol=lf
