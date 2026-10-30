@@ -1,6 +1,6 @@
 # ADR-0002: Scope and business assumptions
 
-- **Status:** Accepted, provisionally (rows 1–13 confirmed by the developer on 2026-10-30; rows 14–16
+- **Status:** Accepted, provisionally (rows 1–13 confirmed by the developer on 2026-10-30; rows 14–20
   decided by the developer on 2026-10-30 from questions raised by the `domain-analyst` agent). To be
   revisited once the test suite and demo run against them; any change follows the process under *Consequences*
 - **Date:** 2026-10-30
@@ -29,6 +29,10 @@ The brief is deliberately ambiguous. These assumptions turn it into a buildable,
 | 14 | Minimum notice for same-day bookings | None: any start after now is accepted (09:15 can be booked at 09:14) | Keeps walk-in and same-day revenue; a configurable lead time is a small later change to rule 4 |
 | 15 | "Closed that day" vs "runs past closing" | One error, `OutsideOpeningHours`, for both | Simpler contract for v1; adding a detail field later is backwards-compatible |
 | 16 | Company, lease and fleet vehicles (driver is not the registered owner) | Out of scope: booking requires the customer to own the vehicle (`VehicleNotOwnedByCustomer`) | Fleet work is real and valuable, but needs an "authorised driver" model from the DMS; documented as future work |
+| 17 | Neither a qualified technician nor a compatible bay is free | `NoQualifiedTechnicianAvailable` (technician error takes precedence) | Technicians are usually the binding constraint; keeps the `rejected{reason}` staffing signal meaningful; no new error code |
+| 18 | Which specialised bay a `Standard` job uses when no `Standard` bay is free | Fixed specialisation order `Standard < Lift < Alignment < EV`; take the least specialised free bay, then lowest ID | Deterministic and explainable; keeps the scarcest, most specialised bay (EV) for the jobs only it can do |
+| 19 | Skilled, active technician with no shift on any weekday | Still counts as "offered" for rule 3 (active + skill only); bookings get `409 NoQualifiedTechnicianAvailable` | Keeps rule 3 a static capability check; a technician with no shifts is a reference-data problem for the DMS sync to flag |
+| 20 | What "least loaded" measures | Blocked minutes (service + buffer) of `Confirmed` appointments on the dealership's local date | The technician is occupied during clean-up; identical to service minutes while buffers are 0 |
 
 ## Consequences
 

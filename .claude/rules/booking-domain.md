@@ -27,13 +27,13 @@ Evaluated **in this order**; the first failure is returned, so the same input al
 |---|---|---|
 | 1 | Referenced customer, vehicle, service type or dealership does not exist | `NotFound` |
 | 2 | Vehicle does not belong to the customer | `VehicleNotOwnedByCustomer` |
-| 3 | Dealership has no active compatible bay, or no active technician with the required skill, at all | `ServiceNotOfferedAtDealership` |
+| 3 | Dealership has no active compatible bay, or no active technician with the required skill, at all (a static capability check: shifts and bookings are not considered, ADR-0002 #19) | `ServiceNotOfferedAtDealership` |
 | 4 | `requestedStart` is not after now (per `TimeProvider`); compared as instants, never as typed clock times. No minimum notice (ADR-0002 #14) | `StartInPast` |
 | 5 | `requestedStart` is beyond the booking horizon (`BookingHorizonDays`, default 90) | `BeyondBookingHorizon` |
 | 6 | `requestedStart` is not on the 15-minute grid of the dealership's **local** wall clock (seconds and sub-seconds must be zero) | `StartNotOnGrid` |
 | 7 | The **service** interval `[start, start + duration)` is not inside the opening hours of that local date (no row for the weekday = closed) | `OutsideOpeningHours` |
 | 8 | The vehicle has an overlapping confirmed appointment at **any** dealership | `VehicleAlreadyBooked` |
-| 9 | No eligible technician / bay for the interval | `NoQualifiedTechnicianAvailable` / `NoCompatibleBayAvailable` |
+| 9 | No eligible technician / bay for the interval; when **both** are missing, the technician error is returned (ADR-0002 #17) | `NoQualifiedTechnicianAvailable` / `NoCompatibleBayAvailable` |
 
 ## Intervals: service vs blocked
 
@@ -67,10 +67,13 @@ does **not** overlap. Only `Confirmed` appointments count.
 Deterministic, so tests and demos are reproducible. Both policies are **best fit**: never spend a scarce
 resource on a job that a less specialised one can do.
 
-1. **Bay: best fit.** Prefer the least specialised compatible bay (a `Standard` job never takes the
-   `EV` bay while a `Standard` bay is free). Tie-break by bay ID.
-2. **Technician: best fit, then least loaded.** Fewest skills held (protects specialists); then fewest
-   booked minutes on that local date; then technician ID.
+1. **Bay: best fit.** Take the least specialised compatible free bay, in the fixed order
+   `Standard < Lift < Alignment < EV` (ADR-0002 #18): a `Standard` job uses a `Standard` bay, then
+   `Lift`, then `Alignment`, and `EV` only as a last resort. Tie-break by bay ID.
+2. **Technician: best fit, then least loaded.** Fewest skills held, counting every skill (protects
+   specialists; `{General, EV}` and `{General, Alignment}` tie); then fewest blocked minutes (service +
+   buffer) of `Confirmed` appointments on the dealership's local date (ADR-0002 #20); then technician ID.
+   Skills match exactly: a technician needs the required skill itself.
 3. If persisting fails with an exclusion violation on a technician or bay (a concurrent request won
    the race), exclude that resource and retry allocation, at most `MaxAllocationAttempts` (3) in total.
    When attempts run out, return the capacity error for the resource that conflicted last.

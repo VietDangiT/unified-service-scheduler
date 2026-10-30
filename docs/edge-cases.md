@@ -8,13 +8,18 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
 | EC-01 | Back-to-back bookings (10:00–11:00 then 11:00–12:00) on the same technician/bay | Both succeed (half-open intervals) | Unit + Integration | Unit: `TimeSlotTests.Overlaps_WhenSlotsAreBackToBack_ReturnsFalse`, `Overlaps_WhenSlotsAreApart_ReturnsFalse`. Integration: TBD |
-| EC-02 | Requested interval partially overlaps an existing confirmed appointment | Resource is not eligible | Unit | `TimeSlotTests.Overlaps_WhenSlotsShareAnyInstant_ReturnsTrue` (overlap rule; eligibility: TBD in step 3) |
-| EC-04 | Service would end after the only qualified technician's shift | `409 NoQualifiedTechnicianAvailable` | Unit | TBD |
-| EC-05 | Technician qualified but no compatible bay type free | `409 NoCompatibleBayAvailable` | Unit | TBD |
-| EC-06 | Bay free but no technician with the required skill free | `409 NoQualifiedTechnicianAvailable` | Unit | TBD |
+| EC-02 | Requested interval partially overlaps an existing confirmed appointment (technician A busy 09:30–10:30, request 10:00–11:00; same for a bay) | Resource is not eligible: another free one is chosen, or `409` if it was the only one | Unit | `TimeSlotTests.Overlaps_WhenSlotsShareAnyInstant_ReturnsTrue` (overlap rule; eligibility: TBD in step 3) |
+| EC-04 | Service would end after the only qualified technician's shift (shift 08:00–17:00: 16:30 for 60 min rejected, 16:00 for 60 min booked); shift starting after opening (09:00 vs 08:00, request 08:00) | `409 NoQualifiedTechnicianAvailable` / booked at the boundary | Unit | TBD |
+| EC-05 | Technician qualified but no compatible bay type free (EV job, EV bay busy, Standard bays free) | `409 NoCompatibleBayAvailable` | Unit | TBD |
+| EC-06 | Bay free but no technician with the required skill free (only EV technician busy, General-only free) | `409 NoQualifiedTechnicianAvailable` | Unit | TBD |
 | EC-13 | Cancelled appointment in the requested interval | Slot is bookable | Integration | TBD |
-| EC-22 | Dealership has no compatible bay type, or no technician with the skill, at all | `422 ServiceNotOfferedAtDealership` (not 409) | Unit | TBD |
-| EC-23 | Technician has no shift on that weekday | Not eligible | Unit | TBD |
+| EC-22 | Dealership has no active compatible bay, or no active technician with the skill, at all (none exist, or only inactive ones) | `422 ServiceNotOfferedAtDealership` (not 409); checked before past/grid/hours (rule 3) | Unit | TBD |
+| EC-23 | Technician has no shift on that weekday (only qualified technician, Saturday) | Not eligible → `409 NoQualifiedTechnicianAvailable` | Unit | TBD |
+| EC-62 | Standard job at a dealership with only Lift and EV bays | Service is offered (no 422); a Lift bay is used | Unit | TBD |
+| EC-63 | An inactive technician or bay that would otherwise win (fewer skills, lower ID) | Never chosen | Unit | TBD |
+| EC-64 | A free technician or bay from another dealership is among the candidates | Never chosen (EC-46 is the database backstop) | Unit | TBD |
+| EC-65 | Neither a qualified technician nor a compatible bay is free | `409 NoQualifiedTechnicianAvailable` (ADR-0002 #17) | Unit | TBD |
+| EC-69 | Skilled, active technician with no shift on any weekday | Service still offered; booking gets `409 NoQualifiedTechnicianAvailable` (ADR-0002 #19) | Unit | TBD |
 | EC-24 | Shift extends beyond opening hours (07:00–19:00 vs 08:00–18:00), request at 07:30 | `422 OutsideOpeningHours`: the job must fit both | Unit | TBD |
 | EC-25 | Service duration not a multiple of 15 minutes (50 min at 10:00) | Booked 10:00–10:50; the resource is next bookable at 11:00 | Unit | TBD |
 | EC-26 | Buffer runs past closing (60 min + 15 min buffer at 16:00, closes 17:00) | Booked; technician and bay blocked until 17:15 | Unit | TBD |
@@ -26,8 +31,12 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
 | EC-07 | Best-fit bay: Standard job with Standard and EV bays free | Standard bay chosen | Unit | TBD |
-| EC-08 | Best-fit technician: General job, a General-only and an EV-certified technician both free | General-only technician chosen | Unit | TBD |
-| EC-29 | Technicians with equal skills: least booked minutes that day wins; full tie broken by ID | Deterministic choice | Unit | TBD |
+| EC-08 | Best-fit technician: General job, `{General}` and `{General, EV}` technicians both free | `{General}` technician chosen | Unit | TBD |
+| EC-29 | Technicians with equal skill counts: fewest blocked minutes that local date wins; full tie broken by ID | Deterministic choice | Unit | TBD |
+| EC-66 | Standard job, no Standard bay free; Lift, Alignment and EV bays free | Lift bay chosen (order `Standard < Lift < Alignment < EV`, ADR-0002 #18); EV only when nothing else is free | Unit | TBD |
+| EC-67 | Two equally specialised bays free | Lower bay ID chosen | Unit | TBD |
+| EC-68 | `{General}` technician has 6 h booked, `{General, EV}` idle | `{General}` chosen: skill count comes before workload | Unit | TBD |
+| EC-70 | Workload counts only the dealership's local date (Auckland technician with bookings on the same UTC date but another local date) | Those minutes are not counted | Unit | TBD |
 
 ## Validation and input
 
