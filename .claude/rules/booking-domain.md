@@ -28,7 +28,7 @@ Evaluated **in this order**; the first failure is returned, so the same input al
 | 1 | Referenced customer, vehicle, service type or dealership does not exist | `NotFound` |
 | 2 | Vehicle does not belong to the customer | `VehicleNotOwnedByCustomer` |
 | 3 | Dealership has no active compatible bay, or no active technician with the required skill, at all | `ServiceNotOfferedAtDealership` |
-| 4 | `requestedStart` is not after now (per `TimeProvider`) | `StartInPast` |
+| 4 | `requestedStart` is not after now (per `TimeProvider`); compared as instants, never as typed clock times. No minimum notice (ADR-0002 #14) | `StartInPast` |
 | 5 | `requestedStart` is beyond the booking horizon (`BookingHorizonDays`, default 90) | `BeyondBookingHorizon` |
 | 6 | `requestedStart` is not on the 15-minute grid of the dealership's **local** wall clock (seconds and sub-seconds must be zero) | `StartNotOnGrid` |
 | 7 | The **service** interval `[start, start + duration)` is not inside the opening hours of that local date (no row for the weekday = closed) | `OutsideOpeningHours` |
@@ -87,9 +87,12 @@ resource on a job that a less specialised one can do.
 - `closes > opens` on the same date: no `24:00`, no ranges crossing midnight, no split shifts or lunch
   breaks. Appointments therefore never span local midnight.
 - Daylight saving: `requestedStart` carries an offset, so it is an exact instant and always exists.
-  Durations are elapsed time, never wall-clock difference. On a transition day a local range such as
-  `08:00–17:00` may be 8 or 10 elapsed hours; availability steps through **elapsed** 15-minute
+  Durations are elapsed time, never wall-clock difference. On a transition day only a local range that
+  **spans the clock change** differs in elapsed length (London changes at 01:00, so `00:00–06:00` is 5 or
+  7 elapsed hours, while `08:00–17:00` stays 9). Availability steps through **elapsed** 15-minute
   increments mapped to local time, so no slot is duplicated or skipped.
+- A repeated local time (clocks going back) is not yet given a defined meaning for opening hours;
+  ranges spanning it are deferred (see `docs/edge-cases.md`, *Deferred*).
 - The response always includes `localStart`, so an advisor who sent the wrong offset sees the booked local time.
 
 ## Idempotency
@@ -123,4 +126,5 @@ start times at or before now are excluded. Unknown dealership or service type �
 
 Authentication, notifications, payments, rescheduling, multi-technician jobs, multi-day jobs,
 technician leave or sickness, public holidays and one-off closures, split shifts and lunch breaks,
-`Completed` / no-show statuses, customer self-service portal.
+`Completed` / no-show statuses, customer self-service portal, authorised drivers for company/lease/fleet
+vehicles (ADR-0002 #16).

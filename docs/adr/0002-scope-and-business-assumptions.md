@@ -1,6 +1,7 @@
 # ADR-0002: Scope and business assumptions
 
-- **Status:** Accepted, provisionally (all 13 rows confirmed by the developer on 2026-10-30). To be
+- **Status:** Accepted, provisionally (rows 1–13 confirmed by the developer on 2026-10-30; rows 14–16
+  decided by the developer on 2026-10-30 from questions raised by the `domain-analyst` agent). To be
   revisited once the test suite and demo run against them; any change follows the process under *Consequences*
 - **Date:** 2026-10-30
 
@@ -25,6 +26,9 @@ The brief is deliberately ambiguous. These assumptions turn it into a buildable,
 | 11 | Booking horizon | Up to 90 days ahead (configurable) | Bounds availability queries and the alternatives search; typical for workshop planning |
 | 12 | Opening calendar | One opening range per weekday; no public holidays or one-off closures | Bounded scope; closures are a future unavailability calendar |
 | 13 | Appointment lifecycle | `Confirmed → Cancelled` only; cancel is idempotent and refused once the appointment has started | `Completed` / no-show need a workshop process this assessment does not model (YAGNI) |
+| 14 | Minimum notice for same-day bookings | None: any start after now is accepted (09:15 can be booked at 09:14) | Keeps walk-in and same-day revenue; a configurable lead time is a small later change to rule 4 |
+| 15 | "Closed that day" vs "runs past closing" | One error, `OutsideOpeningHours`, for both | Simpler contract for v1; adding a detail field later is backwards-compatible |
+| 16 | Company, lease and fleet vehicles (driver is not the registered owner) | Out of scope: booking requires the customer to own the vehicle (`VehicleNotOwnedByCustomer`) | Fleet work is real and valuable, but needs an "authorised driver" model from the DMS; documented as future work |
 
 ## Consequences
 
