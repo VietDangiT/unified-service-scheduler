@@ -43,7 +43,7 @@ unified-service-scheduler/
     ├── settings.json             Permissions and hooks
     ├── rules/                    Engineering standards, loaded by folder
     ├── commands/                 Slash commands: /verify, /tdd, /ai-log
-    ├── agents/                   Review subagents: domain-analyst, code-reviewer, test-auditor
+    ├── agents/                   Subagents: implementer, domain-analyst, code-reviewer, test-auditor
     └── hooks/                    Scripts that run automatically on AI actions
 ```
 
@@ -173,12 +173,15 @@ Each file starts with a `paths:` header listing the folders it applies to.
 
 ### `.claude/agents/`
 
-All agents review and report; none edits files. Together they answer three different questions:
+The main session acts as **orchestrator** (see `CLAUDE.md › Agent team and orchestration`): it writes
+work packages, delegates, checks results and holds the developer approvals. Only `implementer` edits
+code; the other agents review and report. The reviewers answer three different questions:
 *what should be tested* (domain-analyst), *is the new code correct* (code-reviewer) and *would the
 tests catch a broken rule* (test-auditor, backed by mutation testing).
 
 | Agent | Use it | Checks |
 |---|---|---|
+| `implementer` | Given one approved work package by the orchestrator (the main session) | The only agent that edits code: writes the failing tests (red) and stops to report, then implements (green) with approved tests frozen, adds the packaged mutations and runs the quality gate; a `fix` phase handles review findings. Never decides business rules, never edits rules/ADRs/design docs, never changes git state |
 | `domain-analyst` | At the start of each step, before writing tests | Thinks like a service advisor and workshop manager: derives Given/When/Then business scenarios (boundaries, real counter situations, rule combinations), separates agreed outcomes from open questions, and checks tests read as business rules |
 | `code-reviewer` | After a feature, before committing | Booking invariants → concurrency → data access (N+1) → async → layering → error handling → missing tests. Each finding has severity, `file:line`, a failure scenario and a fix |
 | `test-auditor` | After a batch of tests | Maps every row of `edge-cases.md` to real tests and asks "would this test fail if the rule were broken?" Reports covered / weak / missing |
