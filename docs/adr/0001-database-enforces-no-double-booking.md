@@ -15,8 +15,8 @@ several API instances run behind a load balancer.
 PostgreSQL **exclusion constraints** (with `btree_gist`) on `appointments` reject any two confirmed
 rows that overlap (half-open `'[)'` ranges) for:
 
-- the same `technician_id` or `service_bay_id`, over `[start_utc, blocked_until_utc)` (service + buffer);
-- the same `vehicle_id`, over `[start_utc, end_utc)` (service only).
+- the same `technician_id` or `service_bay_id`, over `[start_at, blocked_until)` (service + buffer);
+- the same `vehicle_id`, over `[start_at, end_at)` (service only).
 
 The application still pre-filters candidates to choose resources and produce precise errors. On a
 `23P01` violation for a technician or bay it retries allocation with the next candidate (max 3

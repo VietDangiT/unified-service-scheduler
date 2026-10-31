@@ -47,6 +47,6 @@ than a little duplication. Test code may repeat setup for readability; use build
 - Methods short enough to read without scrolling. Extract when a comment would otherwise explain a block.
 - Comments explain *why*, never *what*. Public types in Domain and Application get XML docs only when the
   name is not self-explanatory.
-- `DateTime` never appears in Domain; use `DateTimeOffset` (UTC) for instants, `TimeOnly`/`DateOnly` for
-  wall-clock values, and take `now` as a parameter (see `async-concurrency.md › Time`).
+- Times in Domain are plain `DateTime` values on one clock (ADR-0002 #25), with `TimeOnly` for times of
+  day; take `now` as a parameter (see `async-concurrency.md › Time`).
 - Collections: avoid multiple enumeration of `IEnumerable<T>`; materialise once when needed.

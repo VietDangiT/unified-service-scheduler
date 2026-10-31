@@ -9,5 +9,5 @@ public sealed record BookingRequest(
     CustomerId CustomerId,
     Vehicle Vehicle,
     Dealership Dealership,
-    DateTimeOffset RequestedStart,
+    DateTime RequestedStart,
     ServiceType ServiceType);

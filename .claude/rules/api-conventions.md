@@ -18,8 +18,8 @@ paths:
 
 - Plural nouns, kebab-case paths, camelCase JSON. Actions that are not CRUD use a sub-resource verb
   (`/cancel`), never a `PATCH` with a magic status value.
-- Timestamps in contracts are ISO-8601 with offset (`2026-11-03T09:00:00+00:00`); responses return UTC
-  plus the dealership's local time where useful for display.
+- Timestamps in contracts are ISO-8601 without an offset (`2026-11-03T09:00:00`): one clock, no time
+  zones (ADR-0002 #25).
 - Version the API from day one (`/api/...` maps to v1; breaking changes require a new version).
 
 ## Contracts

@@ -18,7 +18,7 @@ review against; list the rule files you read at the top of your report.
 ## Check, in priority order
 
 1. **Correctness of booking invariants:** whole-duration fit, half-open overlap, cancelled appointments
-   ignored, technician skill + shift, bay type, vehicle overlap, UTC vs local time, DST.
+   ignored, technician skill + shift, bay type, vehicle overlap.
 2. **Concurrency:** any check-then-act without the database constraint behind it; constraint violations
    not translated or not retried; in-process locks used as a correctness guard; shared `DbContext`;
    captive dependencies; missing idempotency handling.

@@ -3,6 +3,12 @@
 Every row must map to at least one test. Keep the **Test** column current (`/tdd` and the
 `test-auditor` agent rely on it). Rules behind each row: `.claude/rules/booking-domain.md`.
 
+## End-to-end booking
+
+| ID | Edge case | Expected outcome | Suite | Test |
+|---|---|---|---|---|
+| EC-72 | An advisor books an oil change for a customer's vehicle at 10:00 on a Tuesday, with a technician and a bay free | `201` with `Location` and the confirmed appointment (customer, vehicle, service type, dealership, technician and bay IDs, start, end, status `Confirmed`); exactly one row in `appointments` with those same values | Integration | `PostAppointmentTests.PostAppointment_WhenTechnicianAndBayAreFree_ReturnsCreatedAndStoresConfirmedAppointment` |
+
 ## Overlap and capacity
 
 | ID | Edge case | Expected outcome | Suite | Test |
@@ -32,23 +38,22 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 |---|---|---|---|---|
 | EC-07 | Best-fit bay: Standard job with Standard and EV bays free | Standard bay chosen | Unit | `SlotAllocatorTests.Allocate_WhenStandardAndEvBaysAreFree_ChoosesStandardBay` |
 | EC-08 | Best-fit technician: General job, `{General}` and `{General, EV}` technicians both free | `{General}` technician chosen | Unit | `SlotAllocatorTests.Allocate_WhenGeneralistAndEvTechnicianAreFree_ChoosesGeneralist` |
-| EC-29 | Technicians with equal skill counts: fewest blocked minutes that local date wins; full tie broken by ID | Deterministic choice | Unit | `SlotAllocatorTests.Allocate_WhenSkillCountsAreEqual_ChoosesTechnicianWithFewestBookedMinutesThatDay`, `…_WhenEvAndAlignmentTechniciansAreFree_ChoosesTheLessBookedOne`, `…_WhenSkillsAndWorkloadAreEqual_ChoosesLowerTechnicianId` |
+| EC-29 | Technicians with equal skill counts: fewest blocked minutes that date wins; full tie broken by ID | Deterministic choice | Unit | `SlotAllocatorTests.Allocate_WhenSkillCountsAreEqual_ChoosesTechnicianWithFewestBookedMinutesThatDay`, `…_WhenEvAndAlignmentTechniciansAreFree_ChoosesTheLessBookedOne`, `…_WhenSkillsAndWorkloadAreEqual_ChoosesLowerTechnicianId`, `…_WhenTechnicianIsBusierOnAnotherDate_CountsOnlyThatDatesBookingsAsWorkload` |
 | EC-66 | Standard job, no Standard bay free; Lift, Alignment and EV bays free | Lift bay chosen (order `Standard < Lift < Alignment < EV`, ADR-0002 #18); EV only when nothing else is free | Unit | `SlotAllocatorTests.Allocate_WhenStandardBayIsBusy_ChoosesLiftBeforeAlignmentAndEv`, `…_WhenStandardAndLiftBaysAreBusy_ChoosesAlignmentBeforeEv`, `…_WhenOnlyEvBayIsFreeForStandardJob_ChoosesEvBay` |
 | EC-67 | Two equally specialised bays free | Lower bay ID chosen | Unit | `SlotAllocatorTests.Allocate_WhenTwoEquallySpecialisedBaysAreFree_ChoosesLowerBayId` |
 | EC-68 | `{General}` technician has 6 h booked, `{General, EV}` idle | `{General}` chosen: skill count comes before workload | Unit | `SlotAllocatorTests.Allocate_WhenGeneralistHasSixHoursBookedAndEvTechnicianIsIdle_ChoosesGeneralist` |
-| EC-70 | Workload counts only the dealership's local date (Auckland technician with bookings on the same UTC date but another local date) | Those minutes are not counted | Unit | `SlotAllocatorTests.Allocate_InAuckland_CountsOnlyThatLocalWorkingDaysBookingsAsWorkload` |
 | EC-71 | Specialised jobs are bookable: an EV job and an Alignment job, with the matching technician and bay free | Passes validation; allocated to those resources (ADR-0002 #9) | Unit | `BookingValidatorTests.Validate_WhenEvJobAtDealershipWithMixedStaffAndBays_IsAccepted`, `…_WhenAlignmentJobAtDealershipWithMixedStaffAndBays_IsAccepted`, `SlotAllocatorTests.Allocate_WhenEvJobAndEvTechnicianAndEvBayAreFree_ChoosesThem`, `…_WhenAlignmentJobAndAlignmentTechnicianAndAlignmentBayAreFree_ChoosesThem` |
 
 ## Validation and input
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-03 | Service does not fit inside that day's opening hours (ends after closing, starts before opening, longer than the day, or runs past local midnight) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenServiceDoesNotFitOpeningHours_…`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…`, `…_WhenServiceTouchesOpeningOrClosingTime_IsAccepted` |
-| EC-09 | Requested start is now or earlier (compared as instants) | `422 StartInPast` | Unit | `BookingValidatorTests.Validate_WhenStartIsNowOrEarlier_ReturnsStartInPast`, `…_WhenAucklandMorningIsAlreadyOverInLondon_ReturnsStartInPast` |
-| EC-10 | Requested start not on the dealership's 15-minute grid (10:10; or 10:00+00:10 = 09:50 local) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartIsBetweenQuarterHours_…`, `…_WhenRequestOffsetHidesAnOffGridLocalTime_…` |
+| EC-03 | Service does not fit inside that day's opening hours (ends after closing, starts before opening, longer than the day, or runs past midnight) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenServiceDoesNotFitOpeningHours_…`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…`, `…_WhenServiceTouchesOpeningOrClosingTime_IsAccepted`. Past midnight: not covered (see *Deferred*) |
+| EC-09 | Requested start is now or earlier | `422 StartInPast` | Unit | `BookingValidatorTests.Validate_WhenStartIsNowOrEarlier_ReturnsStartInPast`. Earlier date: not covered (see *Deferred*) |
+| EC-10 | Requested start not on the 15-minute grid (10:10) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartIsBetweenQuarterHours_…` |
 | EC-19 | Unknown customer / vehicle / service type / dealership | `404` | Integration | TBD |
 | EC-20 | Vehicle does not belong to the customer | `422 VehicleNotOwnedByCustomer` | Unit | `BookingValidatorTests.Validate_WhenVehicleBelongsToAnotherCustomer_ReturnsVehicleNotOwnedByCustomer` |
-| EC-30 | `requestedStart` without an offset (`2026-11-03T10:00:00`) | `400` | Integration | TBD |
+| EC-30 | `requestedStart` with an offset (`2026-11-03T10:00:00+07:00`) | `400`: one clock, so an offset is never accepted (ADR-0002 #25) | Integration | TBD |
 | EC-31 | `requestedStart` with seconds or milliseconds (`10:00:30`) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartHasSecondsOrMilliseconds_ReturnsStartNotOnGrid` |
 | EC-32 | `requestedStart` beyond the 90-day horizon | `422 BeyondBookingHorizon` | Unit | TBD |
 | EC-33 | Dealership closed that weekday (no opening-hours row) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenDealershipIsClosedThatWeekday_ReturnsOutsideOpeningHours` |
@@ -57,16 +62,6 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | EC-58 | Same-day walk-in: at 09:00 the advisor books 09:15 (or 14:00) today | Accepted; no minimum notice (ADR-0002 #14) | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
 | EC-59 | Quarter-hour starts 10:15, 10:30, 10:45 | Accepted (grid is 15 minutes, not hourly) | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
 | EC-60 | Saturday half-day: 12:00 for 60 min accepted; 08:30 rejected (Saturday opens 09:00) | Accepted / `422 OutsideOpeningHours` | Unit | `…_WhenBookingFollowsEveryRule_IsAccepted`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…` |
-| EC-61 | Far-from-UTC dealership: Auckland Tue 12:30–13:30 local crosses UTC midnight but not local midnight | Accepted | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
-
-## Time zones and daylight saving
-
-| ID | Edge case | Expected outcome | Suite | Test |
-|---|---|---|---|---|
-| EC-11 | Request sent in another offset (`07:30+00:00` in BST = 08:30 London; `17:30+00:00` = 18:30) | The instant counts: 08:30 accepted, 18:30 `422 OutsideOpeningHours`; response `localStart` shows local time | Unit (+ API for `localStart`) | Validation: `…_WhenBookingFollowsEveryRule_IsAccepted`. `localStart`: TBD |
-| EC-12 | Booking on a DST transition day | End = start + duration in elapsed (UTC) time | Unit | TBD |
-| EC-36 | Opening hours or shift spanning a DST change (London 00:00–06:00 on 2027-03-28 = 5 elapsed hours) | Fit is evaluated on the real interval | Unit | TBD |
-| EC-37 | Availability on a DST transition day | No duplicated or missing slot | Unit | TBD |
 
 ## Alternatives on a capacity error
 
@@ -121,7 +116,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-57 | Opening hours or shift with `closes ≤ opens` or `24:00` | Rejected by a `CHECK` constraint (and by `LocalTimeRange` in the domain) | Unit + Integration | TBD |
+| EC-57 | Opening hours or shift with `closes ≤ opens` or `24:00` | Rejected by a `CHECK` constraint (and by `TimeRange` in the domain) | Unit + Integration | TBD |
 
 ## Deferred (known gaps, scheduled)
 
@@ -129,17 +124,20 @@ Findings from code reviews that were consciously postponed, with where they will
 
 | Gap | Planned in |
 |---|---|
-| **Tests removed by the developer on 2026-10-31** to focus on the end-to-end flow (time zones and summer time, error order, technical foundation; restore from commit `05172c2`). No test or mutation now protects: a resource of another dealership (EC-64; the allocator relies on this check), the weekday taken from local time, a job past local midnight (EC-03), the 18:30 summer-time rejection (EC-11), slots normalised to UTC, error order when several rules fail (EC-34, and the order part of EC-22), zero-length slots, empty opening ranges (EC-57), null results | After the end-to-end flow; EC-64 is backed by the foreign key (EC-46) in step 4 |
-| DST transition-day tests (EC-12, EC-36, EC-37): need Sunday opening hours via `DealershipBuilder.OpenOn` and explicit-offset starts | "Later" step (DST) |
-| Opening hours spanning a repeated local hour (clocks going back) can be misjudged because only the two ends are checked; decide "first occurrence" policy and record it in an ADR | "Later" step (DST) |
-| EF Core mapping for `TimeZoneInfo` (IANA ID converter) and `WeeklySchedule`; decide whether to wrap it in the `DealershipTimeZone` value object that `architecture.md` lists | Step 4 |
-| Time-zone data (ICU / tzdata) required in CI and Docker images; tests resolve IANA zones | Step 4 |
-| Busy intervals must cover the technician's whole local date, or workload reads as zero and the lowest ID always wins; state this contract on `BusyIntervals` and in the step 4 query | Step 4 |
-| `Allocation.Slot` is never asserted, and step 4 builds the appointment from it | Step 4 |
-| `Skill` and `ServiceType` do not validate input (`"ev"` vs `"EV"`, zero duration) | Step 4 |
+| **Tests removed by the developer on 2026-10-31** to focus on the end-to-end flow (error order, technical foundation; restore from commit `05172c2`). No test or mutation now protects: a resource of another dealership (EC-64; the allocator relies on this check), a job past midnight (EC-03), error order when several rules fail (EC-34, and the order part of EC-22), zero-length slots, empty opening ranges (EC-57), null results | After the end-to-end flow; EC-64 is backed by the foreign key (EC-46) in step 4 |
+| **EC-30 is a live gap:** an offset on `requestedStart` is converted to the server's clock (`12:00+03:00` booked 16:00 with `201` on a UTC+7 host, and returned an offset), and `Z` gives `500`. A missing ID binds to an empty `Guid`; a missing `requestedStart` binds to the default date | Next branch: invalid request |
+| Rule 4 has no test for a start on an earlier date (EC-09): a past check applied only to today would pass every test | Past-start branch |
+| Whole-date busy window and the `Confirmed` filter are correct but untested, because EC-72 starts with no appointments | "Two technicians" and capacity branches |
+| A non-zero `buffer_minutes` is ignored by `Appointment.Book`, and `blocked_until` is stored permanently; no seeded row triggers it | With buffers |
+| Busy-interval query has no lower bound on `start_at`, so it examines the dealership's whole history | With availability |
+| Who applies migrations outside tests, and the `ConnectionStrings:Scheduling` value | Docker step |
+| CA1861 fails the build on generated migrations; the first one was hand-edited. Decide on exempting `**/Migrations/*.cs` | Next migration |
+| §6.1 says VINs are 17 characters, but no `CHECK` enforces it | After the core |
+| Business-event logging (booked, rejected) is not built yet | With metrics and dashboards |
+| "Now" is read from the server clock, so it must be set to the dealership's time (`TZ` in Docker) | Docker step |
+| `Skill` does not validate input (`"ev"` vs `"EV"`); zero duration is now blocked by a `CHECK` | After the core |
 | `Allocate` has no way to exclude a resource that lost a race; define its shape and align `docs/system-design.md` §7 | Step 5 |
-| Workload tests: a technician with two jobs in a day (sum vs largest), and an early-morning job on another UTC date | After the core |
+| Workload tests: a technician with two jobs in a day (sum vs largest) | After the core |
 | Bay compatibility is left to the swappable policy; filter `CanServe` in the allocator so a new policy cannot break it | After the core |
 | `Dealership` equality by `Id` is unused and untested, and `==` is still reference equality | After the core |
-| `.Date` puts `DateTime` in the domain (`SlotAllocator`, `WeeklySchedule`); use `DateOnly` | After the core |
 | EC-25 (duration not a multiple of 15 minutes) has no test yet | With buffers |

@@ -11,13 +11,13 @@ internal sealed class BusyIntervalsBuilder
 
     public static BusyIntervalsBuilder None() => new();
 
-    public BusyIntervalsBuilder TechnicianBusy(Technician technician, DateTimeOffset start, int minutes)
+    public BusyIntervalsBuilder TechnicianBusy(Technician technician, DateTime start, int minutes)
     {
         _technicians.Add(new TechnicianBusyInterval(technician.Id, TimeSlot.Create(start, TimeSpan.FromMinutes(minutes))));
         return this;
     }
 
-    public BusyIntervalsBuilder BayBusy(ServiceBay bay, DateTimeOffset start, int minutes)
+    public BusyIntervalsBuilder BayBusy(ServiceBay bay, DateTime start, int minutes)
     {
         _bays.Add(new BayBusyInterval(bay.Id, TimeSlot.Create(start, TimeSpan.FromMinutes(minutes))));
         return this;

@@ -40,8 +40,8 @@ nothing in the solution and on no framework (no EF Core, no ASP.NET Core, no log
    appointment at any instant. The final guard is a PostgreSQL exclusion constraint; application
    checks exist to choose resources and to return precise errors, never as the only protection.
 2. **Whole-duration fit.** Bay, technician shift and opening hours must cover `[start, end)` entirely.
-3. **Time is UTC** in storage and comparisons; dealership-local time (IANA zone) is used only to
-   evaluate opening hours and shifts. "Now" comes from an injected `TimeProvider`.
+3. **One clock.** Every time is a plain date and time on one clock, with no time zones and no UTC
+   conversion (ADR-0002 #25). "Now" comes from an injected `TimeProvider`.
 4. **Cancelled appointments never block capacity.**
 
 ## Engineering standards

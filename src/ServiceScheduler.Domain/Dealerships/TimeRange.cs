@@ -1,11 +1,11 @@
 namespace ServiceScheduler.Domain.Dealerships;
 
-/// <summary>A half-open wall-clock range <c>[Start, End)</c> within one local day.</summary>
-public sealed record LocalTimeRange
+/// <summary>A half-open range of clock times <c>[Start, End)</c> within one day.</summary>
+public sealed record TimeRange
 {
     /// <exception cref="ArgumentException"><paramref name="end"/> is not after <paramref name="start"/>;
     /// ranges never cross midnight.</exception>
-    public LocalTimeRange(TimeOnly start, TimeOnly end)
+    public TimeRange(TimeOnly start, TimeOnly end)
     {
         if (end <= start)
         {

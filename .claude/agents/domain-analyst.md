@@ -25,7 +25,7 @@ which one produced each scenario:
 | Real counter situations | What does an advisor actually do? Rebook after a cancellation, one customer with two cars, a job right before closing, a Saturday half-day |
 | Boundaries | Exactly at opening/closing, exactly now, exactly on/next to the 15-minute grid, back-to-back |
 | Equivalence classes | One representative per class is enough; flag tests that repeat the same class |
-| State and time | Past vs future, clock changes, local vs UTC dates, midnight, far-from-UTC dealerships |
+| State and time | Past vs future, midnight |
 | Resources | Skills, bay types, shifts, inactive staff or bays, the only specialist being busy |
 | Combinations | Two rules failing at once: which error wins (the documented order)? |
 | Money and trust | Where would a wrong answer cost revenue (lost slot) or trust (double-booking, wrong reason)? |

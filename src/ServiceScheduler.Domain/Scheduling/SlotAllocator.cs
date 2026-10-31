@@ -25,7 +25,7 @@ public sealed class SlotAllocator
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var technician = _technicianPolicy.Choose(EligibleTechnicians(request), WorkloadOnLocalDate(request));
+        var technician = _technicianPolicy.Choose(EligibleTechnicians(request), WorkloadOnDate(request));
         var bay = _bayPolicy.Choose(FreeBays(request), request.ServiceType.RequiredBayType);
 
         // The technician error takes precedence when both are missing (ADR-0002 #17).
@@ -42,19 +42,14 @@ public sealed class SlotAllocator
         return Result.Success(new Allocation(bay.Id, technician.Id, request.Slot));
     }
 
-    private static Technician[] EligibleTechnicians(AllocationRequest request)
-    {
-        var zone = request.Dealership.TimeZone;
-
-        return
-        [
-            .. request.Dealership.Technicians.Where(technician =>
-                technician.IsActive
-                && technician.IsQualifiedFor(request.ServiceType.RequiredSkill)
-                && technician.IsOnShiftFor(request.Slot, zone)
-                && !request.Busy.Technicians.Any(busy => busy.TechnicianId == technician.Id && busy.Blocked.Overlaps(request.Slot))),
-        ];
-    }
+    private static Technician[] EligibleTechnicians(AllocationRequest request) =>
+    [
+        .. request.Dealership.Technicians.Where(technician =>
+            technician.IsActive
+            && technician.IsQualifiedFor(request.ServiceType.RequiredSkill)
+            && technician.IsOnShiftFor(request.Slot)
+            && !request.Busy.Technicians.Any(busy => busy.TechnicianId == technician.Id && busy.Blocked.Overlaps(request.Slot))),
+    ];
 
     private static ServiceBay[] FreeBays(AllocationRequest request) =>
     [
@@ -63,14 +58,13 @@ public sealed class SlotAllocator
             && !request.Busy.Bays.Any(busy => busy.BayId == bay.Id && busy.Blocked.Overlaps(request.Slot))),
     ];
 
-    // A job belongs to the local date it starts on: appointments never span local midnight.
-    private static Dictionary<TechnicianId, TimeSpan> WorkloadOnLocalDate(AllocationRequest request)
+    // A job belongs to the date it starts on: appointments never span midnight.
+    private static Dictionary<TechnicianId, TimeSpan> WorkloadOnDate(AllocationRequest request)
     {
-        var zone = request.Dealership.TimeZone;
-        var localDate = TimeZoneInfo.ConvertTime(request.Slot.StartUtc, zone).Date;
+        var date = request.Slot.Start.Date;
 
         return request.Busy.Technicians
-            .Where(busy => TimeZoneInfo.ConvertTime(busy.Blocked.StartUtc, zone).Date == localDate)
+            .Where(busy => busy.Blocked.Start.Date == date)
             .GroupBy(busy => busy.TechnicianId)
             .ToDictionary(
                 jobs => jobs.Key,

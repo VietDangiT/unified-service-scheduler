@@ -25,7 +25,7 @@ if ($LASTEXITCODE -ge 8) { throw "Copying the repository to $Root failed (roboco
 $V = "src\ServiceScheduler.Domain\Scheduling\BookingValidator.cs"
 $W = "src\ServiceScheduler.Domain\Dealerships\WeeklySchedule.cs"
 $T = "src\ServiceScheduler.Domain\Scheduling\TimeSlot.cs"
-$L = "src\ServiceScheduler.Domain\Dealerships\LocalTimeRange.cs"
+$L = "src\ServiceScheduler.Domain\Dealerships\TimeRange.cs"
 $R = "src\ServiceScheduler.Domain\Common\Result.cs"
 $A = "src\ServiceScheduler.Domain\Scheduling\SlotAllocator.cs"
 $BP = "src\ServiceScheduler.Domain\Scheduling\BestFitBayPolicy.cs"
@@ -38,7 +38,7 @@ $BT = "src\ServiceScheduler.Domain\Dealerships\BayType.cs"
 $ownerBlock = "        if (request.Vehicle.OwnerId != request.CustomerId)`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.VehicleNotOwnedByCustomer);`n        }`n`n"
 $offeredBlock = "        if (!IsOffered(request.Dealership, request.ServiceType))`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.ServiceNotOfferedAtDealership);`n        }`n`n"
 $pastBlock = "        if (request.RequestedStart <= now)`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.StartInPast);`n        }`n`n"
-$gridBlock = "        if (!IsOnGrid(request.RequestedStart, request.Dealership.TimeZone))`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.StartNotOnGrid);`n        }`n`n"
+$gridBlock = "        if (!IsOnGrid(request.RequestedStart))`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.StartNotOnGrid);`n        }`n`n"
 $noTechnicianBlock = "        if (technician is null)`n        {`n            return Result.Failure<Allocation>(BookingErrors.NoQualifiedTechnicianAvailable);`n        }`n`n"
 $noBayBlock = "        if (bay is null)`n        {`n            return Result.Failure<Allocation>(BookingErrors.NoCompatibleBayAvailable);`n        }`n`n"
 
@@ -49,32 +49,28 @@ $mutations = @(
     @{ Name = "Owner check removed";                    File = $V; Old = "if (request.Vehicle.OwnerId != request.CustomerId)"; New = "if (request.Vehicle.OwnerId != request.Vehicle.OwnerId)" }
     @{ Name = "Start == now accepted (<= to <)";        File = $V; Old = "request.RequestedStart <= now"; New = "request.RequestedStart < now" }
     @{ Name = "Same-day bookings rejected";             File = $V; Old = "request.RequestedStart <= now"; New = "request.RequestedStart.Date <= now.Date" }
-    @{ Name = "Past compared on typed wall clock";      File = $V; Old = "request.RequestedStart <= now"; New = "request.RequestedStart.DateTime <= now.DateTime" }
     @{ Name = "Grid ignores seconds/milliseconds";      File = $V; Old = "TimeOfDay.Ticks % SlotGranularity.Ticks == 0"; New = "TimeOfDay.Minutes % 15 == 0" }
     @{ Name = "Hourly grid only";                       File = $V; Old = "TimeOfDay.Ticks % SlotGranularity.Ticks == 0"; New = "TimeOfDay.Ticks % TimeSpan.FromHours(1).Ticks == 0" }
-    @{ Name = "Grid checked on request's own offset";   File = $V; Old = "TimeZoneInfo.ConvertTime(start, zone).TimeOfDay"; New = "start.TimeOfDay" }
     # Opening hours (WeeklySchedule)
-    @{ Name = "Opening hours compared in UTC";          File = $W; Old = @("TimeZoneInfo.ConvertTime(slot.StartUtc, zone)", "TimeZoneInfo.ConvertTime(slot.EndUtc, zone)"); New = @("slot.StartUtc", "slot.EndUtc") }
-    @{ Name = "Saturday treated as closed";             File = $W; Old = "|| !_days.TryGetValue("; New = "|| localStart.DayOfWeek == DayOfWeek.Saturday || !_days.TryGetValue(" }
-    @{ Name = "Ending exactly at closing rejected";     File = $W; Old = "TimeOnly.FromTimeSpan(localEnd.TimeOfDay) <= range.End"; New = "TimeOnly.FromTimeSpan(localEnd.TimeOfDay) < range.End" }
-    @{ Name = "Starting exactly at opening rejected";   File = $W; Old = "range.Start <= TimeOnly.FromTimeSpan(localStart.TimeOfDay)"; New = "range.Start < TimeOnly.FromTimeSpan(localStart.TimeOfDay)" }
-    @{ Name = "Local-midnight check uses UTC dates";    File = $W; Old = "localStart.Date != localEnd.Date"; New = "slot.StartUtc.Date != slot.EndUtc.Date" }
+    @{ Name = "Saturday treated as closed";             File = $W; Old = "|| !_days.TryGetValue("; New = "|| slot.Start.DayOfWeek == DayOfWeek.Saturday || !_days.TryGetValue(" }
+    @{ Name = "Ending exactly at closing rejected";     File = $W; Old = "TimeOnly.FromDateTime(slot.End) <= range.End"; New = "TimeOnly.FromDateTime(slot.End) < range.End" }
+    @{ Name = "Starting exactly at opening rejected";   File = $W; Old = "range.Start <= TimeOnly.FromDateTime(slot.Start)"; New = "range.Start < TimeOnly.FromDateTime(slot.Start)" }
     # Value objects and Result
-    @{ Name = "Back-to-back slots overlap (< to <=)";   File = $T; Old = "StartUtc < other.EndUtc && other.StartUtc < EndUtc"; New = "StartUtc <= other.EndUtc && other.StartUtc <= EndUtc" }
+    @{ Name = "Back-to-back slots overlap (< to <=)";   File = $T; Old = "Start < other.End && other.Start < End"; New = "Start <= other.End && other.Start <= End" }
     # Allocation (step 3): technician and bay eligibility
     @{ Name = "Technician busy intervals ignored";      File = $A; Old = "busy.TechnicianId == technician.Id && busy.Blocked.Overlaps(request.Slot)"; New = "false" }
     @{ Name = "Bay busy intervals ignored";             File = $A; Old = "busy.BayId == bay.Id && busy.Blocked.Overlaps(request.Slot)"; New = "false" }
-    @{ Name = "Shift check tests only the start";       File = $TC; Old = "Shifts.Covers(slot, zone)"; New = "Shifts.Covers(TimeSlot.Create(slot.StartUtc, TimeSpan.FromMinutes(1)), zone)" }
+    @{ Name = "Shift check tests only the start";       File = $TC; Old = "Shifts.Covers(slot)"; New = "Shifts.Covers(TimeSlot.Create(slot.Start, TimeSpan.FromMinutes(1)))" }
     @{ Name = "Standard job requires exact Standard bay"; File = $SB; Old = "required == BayType.Standard || Type == required"; New = "Type == required" }
     @{ Name = "Specialised job accepts any bay type";   File = $SB; Old = "required == BayType.Standard || Type == required"; New = "true" }
-    @{ Name = "Inactive filter removed";                File = $A; Old = @("technician.IsActive`n                && ", "bay.IsActive`n            && "); New = @("", "") }
+    @{ Name = "Inactive filter removed";                File = $A; Old = @("technician.IsActive`n            && ", "bay.IsActive`n            && "); New = @("", "") }
     @{ Name = "Bay error returned when both missing";   File = $A; Old = ($noTechnicianBlock + $noBayBlock); New = ($noBayBlock + $noTechnicianBlock) }
     # Allocation policies: best fit and workload
     @{ Name = "Bay order EV before Lift";               File = $BT; Old = "    Lift,`n    Alignment,`n    EV,"; New = "    EV,`n    Lift,`n    Alignment," }
     @{ Name = "Workload compared before skill count";   File = $TP; Old = ".OrderBy(technician => technician.Skills.Count)`n            .ThenBy(technician => workload.GetValueOrDefault(technician.Id))"; New = ".OrderBy(technician => workload.GetValueOrDefault(technician.Id))`n            .ThenBy(technician => technician.Skills.Count)" }
-    @{ Name = "Workload uses the UTC date";             File = $A; Old = @("TimeZoneInfo.ConvertTime(request.Slot.StartUtc, zone).Date", "TimeZoneInfo.ConvertTime(busy.Blocked.StartUtc, zone).Date"); New = @("request.Slot.StartUtc.Date", "busy.Blocked.StartUtc.Date") }
     @{ Name = "ID tie-break reversed";                  File = $TP; Old = ".ThenBy(technician => technician.Id.Value)"; New = ".ThenByDescending(technician => technician.Id.Value)" }
     @{ Name = "ID tie-break reversed (bay)";            File = $BP; Old = ".ThenBy(bay => bay.Id.Value)"; New = ".ThenByDescending(bay => bay.Id.Value)" }
+    @{ Name = "Workload counts every date";             File = $A; Old = ".Where(busy => busy.Blocked.Start.Date == date)`n            "; New = "" }
     # Dealership aggregate and rule 3
     @{ Name = "Rule 3 counts inactive resources";       File = $V; Old = @("technician.IsActive && ", "bay.IsActive && "); New = @("", "") }
     # Specialised jobs stay bookable (EC-71)

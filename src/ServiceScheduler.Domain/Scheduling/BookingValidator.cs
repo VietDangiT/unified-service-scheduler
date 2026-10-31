@@ -13,7 +13,7 @@ public static class BookingValidator
     public static readonly TimeSpan SlotGranularity = TimeSpan.FromMinutes(15);
 
     /// <returns>The service interval when every rule passes; otherwise the first failing rule.</returns>
-    public static Result<TimeSlot> Validate(BookingRequest request, DateTimeOffset now)
+    public static Result<TimeSlot> Validate(BookingRequest request, DateTime now)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -32,7 +32,7 @@ public static class BookingValidator
             return Result.Failure<TimeSlot>(BookingErrors.StartInPast);
         }
 
-        if (!IsOnGrid(request.RequestedStart, request.Dealership.TimeZone))
+        if (!IsOnGrid(request.RequestedStart))
         {
             return Result.Failure<TimeSlot>(BookingErrors.StartNotOnGrid);
         }
@@ -52,7 +52,7 @@ public static class BookingValidator
         dealership.Technicians.Any(technician => technician.IsActive && technician.IsQualifiedFor(serviceType.RequiredSkill))
         && dealership.Bays.Any(bay => bay.IsActive && bay.CanServe(serviceType.RequiredBayType));
 
-    // Checked on the local wall clock; whole ticks, so seconds and milliseconds also fail.
-    private static bool IsOnGrid(DateTimeOffset start, TimeZoneInfo zone) =>
-        TimeZoneInfo.ConvertTime(start, zone).TimeOfDay.Ticks % SlotGranularity.Ticks == 0;
+    // Whole ticks, so seconds and milliseconds also fail.
+    private static bool IsOnGrid(DateTime start) =>
+        start.TimeOfDay.Ticks % SlotGranularity.Ticks == 0;
 }

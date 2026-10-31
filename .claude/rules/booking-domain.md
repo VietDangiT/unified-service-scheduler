@@ -12,11 +12,11 @@ Status of each assumption is tracked in `docs/adr/`. Every rule maps to a row in
 
 ## Booking request
 
-Input: `customerId`, `vehicleId`, `serviceTypeId`, `dealershipId`, `requestedStart` (ISO-8601 **with**
-offset), optional `Idempotency-Key` header. The caller is a service advisor using an internal tool
+Input: `customerId`, `vehicleId`, `serviceTypeId`, `dealershipId`, `requestedStart` (ISO-8601 date and
+time, **no** offset), optional `Idempotency-Key` header. The caller is a service advisor using an internal tool
 (no end-customer auth in scope).
 
-Shape errors are `400` (API layer): missing fields, malformed IDs, `requestedStart` without an offset,
+Shape errors are `400` (API layer): missing fields, malformed IDs, `requestedStart` with an offset,
 `Idempotency-Key` empty or longer than 64 characters.
 
 ## Validation (reject with a domain error, never an exception)
@@ -28,10 +28,10 @@ Evaluated **in this order**; the first failure is returned, so the same input al
 | 1 | Referenced customer, vehicle, service type or dealership does not exist | `NotFound` |
 | 2 | Vehicle does not belong to the customer | `VehicleNotOwnedByCustomer` |
 | 3 | Dealership has no active compatible bay, or no active technician with the required skill, at all (a static capability check: shifts and bookings are not considered, ADR-0002 #19) | `ServiceNotOfferedAtDealership` |
-| 4 | `requestedStart` is not after now (per `TimeProvider`); compared as instants, never as typed clock times. No minimum notice (ADR-0002 #14) | `StartInPast` |
+| 4 | `requestedStart` is not after now (per `TimeProvider`). No minimum notice (ADR-0002 #14) | `StartInPast` |
 | 5 | `requestedStart` is beyond the booking horizon (`BookingHorizonDays`, default 90) | `BeyondBookingHorizon` |
-| 6 | `requestedStart` is not on the 15-minute grid of the dealership's **local** wall clock (seconds and sub-seconds must be zero) | `StartNotOnGrid` |
-| 7 | The **service** interval `[start, start + duration)` is not inside the opening hours of that local date (no row for the weekday = closed) | `OutsideOpeningHours` |
+| 6 | `requestedStart` is not on the 15-minute grid of the clock (seconds and sub-seconds must be zero) | `StartNotOnGrid` |
+| 7 | The **service** interval `[start, start + duration)` is not inside the opening hours of that date (no row for the weekday = closed) | `OutsideOpeningHours` |
 | 8 | The vehicle has an overlapping confirmed appointment at **any** dealership | `VehicleAlreadyBooked` |
 | 9 | No eligible technician / bay for the interval; when **both** are missing, the technician error is returned (ADR-0002 #17) | `NoQualifiedTechnicianAvailable` / `NoCompatibleBayAvailable` |
 
@@ -42,7 +42,7 @@ Evaluated **in this order**; the first failure is returned, so the same input al
 - **Blocked interval** `[start, blockedUntil)`, `blockedUntil = serviceEnd + serviceType.Buffer` (default 0).
   The technician and bay are occupied for this interval. The buffer **may run past closing time or the
   end of the shift** (clean-up after the last job).
-- Both instants are stored on the appointment; later changes to a service type never alter existing appointments.
+- Both times are stored on the appointment; later changes to a service type never alter existing appointments.
 - A duration that is not a multiple of 15 minutes is allowed; the resource is next bookable at the
   first grid point at or after `blockedUntil`.
 
@@ -74,7 +74,7 @@ resource on a job that a less specialised one can do.
    `Lift`, then `Alignment`, and `EV` only as a last resort. Tie-break by bay ID.
 2. **Technician: best fit, then least loaded.** Fewest skills held, counting every skill (protects
    specialists; `{General, EV}` and `{General, Alignment}` tie); then fewest blocked minutes (service +
-   buffer) of `Confirmed` appointments on the dealership's local date (ADR-0002 #20); then technician ID.
+   buffer) of `Confirmed` appointments on that date (ADR-0002 #20); then technician ID.
    Skills match exactly: a technician needs the required skill itself.
 3. If persisting fails with an exclusion violation on a technician or bay (a concurrent request won
    the race), exclude that resource and retry allocation, at most `MaxAllocationAttempts` (3) in total.
@@ -83,22 +83,16 @@ resource on a job that a less specialised one can do.
 4. A violation on the **vehicle** constraint is not retried: return `VehicleAlreadyBooked`.
 5. A capacity error (`NoQualified…`, `NoCompatible…`) includes up to `AlternativesToSuggest` (3) start
    times: the earliest free starts **after** the requested start, within `AlternativesSearchDays` (7)
-   local days, never in the past, and not overlapping the vehicle's other bookings. The list may be empty.
+   days, never in the past, and not overlapping the vehicle's other bookings. The list may be empty.
 
 ## Time and calendars
 
-- Store UTC. Opening hours and shifts are one `[opens, closes)` range per weekday in dealership-local
-  time, evaluated by converting the UTC interval with the dealership's IANA zone.
+- One clock for everything: a time is a plain date and time, with no time zone and no UTC conversion
+  (ADR-0002 #25). `10:00` means 10:00 in the request, the response and the database.
+- Opening hours and shifts are one `[opens, closes)` range per weekday.
 - `closes > opens` on the same date: no `24:00`, no ranges crossing midnight, no split shifts or lunch
-  breaks. Appointments therefore never span local midnight.
-- Daylight saving: `requestedStart` carries an offset, so it is an exact instant and always exists.
-  Durations are elapsed time, never wall-clock difference. On a transition day only a local range that
-  **spans the clock change** differs in elapsed length (London changes at 01:00, so `00:00–06:00` is 5 or
-  7 elapsed hours, while `08:00–17:00` stays 9). Availability steps through **elapsed** 15-minute
-  increments mapped to local time, so no slot is duplicated or skipped.
-- A repeated local time (clocks going back) is not yet given a defined meaning for opening hours;
-  ranges spanning it are deferred (see `docs/edge-cases.md`, *Deferred*).
-- The response always includes `localStart`, so an advisor who sent the wrong offset sees the booked local time.
+  breaks. Appointments therefore never span midnight.
+- "Now" comes from the server clock through `TimeProvider`, so that clock must be set to the dealership's time.
 
 ## Idempotency
 
@@ -117,14 +111,14 @@ The only status transition is `Confirmed → Cancelled` (atomic conditional upda
 
 | Current state | Result |
 |---|---|
-| `Confirmed`, start in the future | `200`, status `Cancelled`, `cancelledAtUtc` set; the slot is immediately bookable |
+| `Confirmed`, start in the future | `200`, status `Cancelled`, `cancelledAt` set; the slot is immediately bookable |
 | Already `Cancelled` | `200`, unchanged (idempotent) |
 | `Confirmed`, start ≤ now | `AppointmentAlreadyStarted` (409) |
 | Unknown ID | `NotFound` (404) |
 
 ## Availability query
 
-`date` is a dealership-local date. Past dates and dates beyond the booking horizon → `422`. For today,
+Past dates and dates beyond the booking horizon → `422`. For today,
 start times at or before now are excluded. Unknown dealership or service type → `404`.
 
 ## Out of scope (documented, not implemented)

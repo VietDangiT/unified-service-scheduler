@@ -4,6 +4,9 @@ namespace ServiceScheduler.Domain.Scheduling;
 
 public static class BookingErrors
 {
+    public static DomainError NotFound { get; } = new(
+        "NotFound", "The customer, vehicle, service type or dealership does not exist.", ErrorKind.NotFound);
+
     public static DomainError VehicleNotOwnedByCustomer { get; } = new(
         "VehicleNotOwnedByCustomer", "The vehicle does not belong to the customer.", ErrorKind.Validation);
 

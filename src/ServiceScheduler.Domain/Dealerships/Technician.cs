@@ -24,7 +24,7 @@ public sealed class Technician
 
     public IReadOnlySet<Skill> Skills { get; }
 
-    /// <summary>Local working hours per weekday, evaluated in the dealership's time zone.</summary>
+    /// <summary>Working hours per weekday.</summary>
     public WeeklySchedule Shifts { get; }
 
     public bool IsActive { get; }
@@ -32,5 +32,5 @@ public sealed class Technician
     /// <summary>Skills match exactly: the technician needs the required skill itself.</summary>
     public bool IsQualifiedFor(Skill skill) => Skills.Contains(skill);
 
-    public bool IsOnShiftFor(TimeSlot slot, TimeZoneInfo zone) => Shifts.Covers(slot, zone);
+    public bool IsOnShiftFor(TimeSlot slot) => Shifts.Covers(slot);
 }

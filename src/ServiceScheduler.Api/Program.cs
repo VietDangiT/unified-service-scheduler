@@ -1,6 +1,29 @@
-var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
+using ServiceScheduler.Api.Appointments;
+using ServiceScheduler.Application.Appointments;
+using ServiceScheduler.Domain.Scheduling;
+using ServiceScheduler.Infrastructure.Persistence;
 
-app.MapGet("/", () => "Hello World!");
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
+});
+
+string connectionString = builder.Configuration.GetConnectionString("Scheduling")
+    ?? throw new InvalidOperationException("The connection string 'ConnectionStrings:Scheduling' is not configured.");
+
+builder.Services.AddProblemDetails();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IBayAllocationPolicy, BestFitBayPolicy>();
+builder.Services.AddSingleton<ITechnicianAllocationPolicy, BestFitTechnicianPolicy>();
+builder.Services.AddSingleton<SlotAllocator>();
+builder.Services.AddScoped<BookAppointmentHandler>();
+builder.Services.AddSchedulingPersistence(connectionString);
+
+WebApplication app = builder.Build();
+
+app.MapGroup("/api").MapAppointmentEndpoints();
 
 app.Run();

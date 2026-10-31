@@ -8,7 +8,7 @@ namespace ServiceScheduler.UnitTests.Builders;
 /// </summary>
 internal sealed class TechnicianBuilder
 {
-    private readonly Dictionary<DayOfWeek, LocalTimeRange> _shifts = new(DealershipBuilder.RiversideOpeningHours);
+    private readonly Dictionary<DayOfWeek, TimeRange> _shifts = new(DealershipBuilder.RiversideOpeningHours);
 
     private int _number = 1;
     private DealershipId _dealershipId = DealershipBuilder.RiversideId;
@@ -44,7 +44,7 @@ internal sealed class TechnicianBuilder
     }
 
     /// <summary>Replaces every shift.</summary>
-    public TechnicianBuilder WithShifts(IReadOnlyDictionary<DayOfWeek, LocalTimeRange> shifts)
+    public TechnicianBuilder WithShifts(IReadOnlyDictionary<DayOfWeek, TimeRange> shifts)
     {
         _shifts.Clear();
         foreach (var (day, range) in shifts)

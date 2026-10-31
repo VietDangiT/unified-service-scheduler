@@ -2,7 +2,10 @@ using ServiceScheduler.Domain.Dealerships;
 
 namespace ServiceScheduler.Domain.Scheduling;
 
-/// <summary>Blocked intervals of the confirmed appointments that may affect an allocation, per technician and per bay.</summary>
+/// <summary>
+/// Blocked intervals of the confirmed appointments that may affect an allocation, per technician and per bay.
+/// They must cover the requested slot's whole date, or workload reads as zero and the lowest ID always wins.
+/// </summary>
 public sealed record BusyIntervals(
     IReadOnlyCollection<TechnicianBusyInterval> Technicians,
     IReadOnlyCollection<BayBusyInterval> Bays)

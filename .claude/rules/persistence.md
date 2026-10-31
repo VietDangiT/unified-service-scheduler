@@ -33,26 +33,27 @@ paths:
 
 ## Schema and constraints
 
-- Columns for instants are `timestamptz` and hold UTC. Map `DateTimeOffset` with offset zero.
+- Columns for times are `timestamp` (no zone), mapped to `DateTime` (ADR-0002 #25).
 - Double-booking is prevented by exclusion constraints (requires `btree_gist`), created in a migration:
 
   ```sql
   ALTER TABLE appointments ADD CONSTRAINT ex_appointments_technician_overlap
-    EXCLUDE USING gist (technician_id WITH =, tstzrange(start_utc, blocked_until_utc, '[)') WITH &&)
+    EXCLUDE USING gist (technician_id WITH =, tsrange(start_at, blocked_until, '[)') WITH &&)
     WHERE (status = 'Confirmed');
-  -- same for service_bay_id; vehicle_id uses tstzrange(start_utc, end_utc) (buffer does not hold the vehicle)
+  -- same for service_bay_id; vehicle_id uses tsrange(start_at, end_at) (buffer does not hold the vehicle)
   ```
 - Tenant boundaries are enforced by composite foreign keys (`(technician_id, dealership_id)` →
   `technicians (id, dealership_id)`), not only by application code.
-- Reference ranges carry `CHECK (closes_at > opens_at)`; PostgreSQL `time` accepts `24:00`, .NET `TimeOnly` does not.
+- Reference ranges carry `CHECK (closes_at > opens_at AND closes_at < '24:00')`; PostgreSQL `time` accepts `24:00`, .NET `TimeOnly` does not.
 - Translate `PostgresException` with `SqlState == PostgresErrorCodes.ExclusionViolation` (`23P01`) to a
   domain error in Infrastructure; constraint name tells which resource conflicted. Never let a raw
   provider exception cross into Application.
 - State transitions: prefer one atomic conditional update (`ExecuteUpdateAsync` with the expected state
   in `WHERE`, check rows affected). Use PostgreSQL `xmin` as a row version only when an aggregate is
   loaded, changed in memory and saved.
-- Every foreign key and every column used in a `WHERE`/`JOIN` on a hot path has an index. The GiST
-  index behind each exclusion constraint also serves overlap queries.
+- Every column used in a `WHERE`/`JOIN` on a hot path has an index, foreign keys included when they are on
+  one. The GiST index behind each exclusion constraint also serves overlap queries.
+- Foreign keys are `ON DELETE RESTRICT`; never rely on EF Core's default cascade for required relationships.
 - Naming: snake_case tables and columns; constraint names are explicit and descriptive.
 
 ## Migrations

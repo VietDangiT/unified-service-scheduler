@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using ServiceScheduler.Domain.Common;
 using ServiceScheduler.Domain.Dealerships;
 using ServiceScheduler.Domain.Scheduling;
@@ -12,8 +10,9 @@ namespace ServiceScheduler.UnitTests.Domain.Scheduling;
 // or is listed last), so a missing rule cannot be hidden by the ID tie-break or by collection order.
 public sealed class SlotAllocatorTests
 {
-    // November 2026: London is on GMT. Riverside (DealershipBuilder default) opens Mon-Fri 08:00-18:00,
-    // Sat 09:00-13:00; technicians work those hours unless a test says otherwise.
+    // Riverside (DealershipBuilder default) opens Mon-Fri 08:00-18:00, Sat 09:00-13:00; technicians work
+    // those hours unless a test says otherwise.
+    private static readonly DateOnly Monday = new(2026, 11, 2);
     private static readonly DateOnly Tuesday = new(2026, 11, 3);
     private static readonly DateOnly Saturday = new(2026, 11, 7);
 
@@ -21,7 +20,7 @@ public sealed class SlotAllocatorTests
     private static readonly ServiceType EvCheck = ServiceTypeBuilder.EvCheck().Build(); // 60 min, EV, EV
 
     // Every test books 10:00-11:00 on Tuesday unless it says otherwise.
-    private static readonly DateTimeOffset TuesdayTen = London(Tuesday, "10:00");
+    private static readonly DateTime TuesdayTen = TimeOn(Tuesday, "10:00");
 
     // EC-01: half-open intervals; a job that ends as the service starts, or starts as it ends, does not block.
     [Theory]
@@ -31,7 +30,7 @@ public sealed class SlotAllocatorTests
     {
         var technician = TechnicianBuilder.Default().Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().TechnicianBusy(technician, London(Tuesday, otherJobStart), 60).Build();
+        var busy = BusyIntervalsBuilder.None().TechnicianBusy(technician, TimeOn(Tuesday, otherJobStart), 60).Build();
 
         var result = Allocate(Riverside([technician], [bay]), OilChange, TuesdayTen, busy);
 
@@ -45,7 +44,7 @@ public sealed class SlotAllocatorTests
     {
         var technician = TechnicianBuilder.Default().Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().BayBusy(bay, London(Tuesday, otherJobStart), 60).Build();
+        var busy = BusyIntervalsBuilder.None().BayBusy(bay, TimeOn(Tuesday, otherJobStart), 60).Build();
 
         var result = Allocate(Riverside([technician], [bay]), OilChange, TuesdayTen, busy);
 
@@ -59,7 +58,7 @@ public sealed class SlotAllocatorTests
         var generalist = TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build();
         var evTechnician = TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General, Skills.EV).Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().TechnicianBusy(generalist, London(Tuesday, "09:30"), 60).Build();
+        var busy = BusyIntervalsBuilder.None().TechnicianBusy(generalist, TimeOn(Tuesday, "09:30"), 60).Build();
 
         var result = Allocate(Riverside([generalist, evTechnician], [bay]), OilChange, TuesdayTen, busy);
 
@@ -76,7 +75,7 @@ public sealed class SlotAllocatorTests
     {
         var technician = TechnicianBuilder.Default().Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().TechnicianBusy(technician, London(Tuesday, otherJobStart), otherJobMinutes).Build();
+        var busy = BusyIntervalsBuilder.None().TechnicianBusy(technician, TimeOn(Tuesday, otherJobStart), otherJobMinutes).Build();
 
         var result = Allocate(Riverside([technician], [bay]), OilChange, TuesdayTen, busy);
 
@@ -89,7 +88,7 @@ public sealed class SlotAllocatorTests
         var technician = TechnicianBuilder.Default().Build();
         var busyBay = ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build();
         var freeBay = ServiceBayBuilder.Default().WithId(2).OfType(BayType.Standard).Build();
-        var busy = BusyIntervalsBuilder.None().BayBusy(busyBay, London(Tuesday, "09:30"), 60).Build();
+        var busy = BusyIntervalsBuilder.None().BayBusy(busyBay, TimeOn(Tuesday, "09:30"), 60).Build();
 
         var result = Allocate(Riverside([technician], [busyBay, freeBay]), OilChange, TuesdayTen, busy);
 
@@ -105,7 +104,7 @@ public sealed class SlotAllocatorTests
     {
         var technician = TechnicianBuilder.Default().Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().BayBusy(bay, London(Tuesday, otherJobStart), otherJobMinutes).Build();
+        var busy = BusyIntervalsBuilder.None().BayBusy(bay, TimeOn(Tuesday, otherJobStart), otherJobMinutes).Build();
 
         var result = Allocate(Riverside([technician], [bay]), OilChange, TuesdayTen, busy);
 
@@ -123,7 +122,7 @@ public sealed class SlotAllocatorTests
         var technician = TechnicianBuilder.Default().OnShift(DayOfWeek.Tuesday, shiftStart, shiftEnd).Build();
         var bay = ServiceBayBuilder.Default().Build();
 
-        var result = Allocate(Riverside([technician], [bay]), OilChange, London(Tuesday, serviceStart));
+        var result = Allocate(Riverside([technician], [bay]), OilChange, TimeOn(Tuesday, serviceStart));
 
         AssertFails(BookingErrors.NoQualifiedTechnicianAvailable, result);
     }
@@ -138,7 +137,7 @@ public sealed class SlotAllocatorTests
         var technician = TechnicianBuilder.Default().OnShift(DayOfWeek.Tuesday, shiftStart, shiftEnd).Build();
         var bay = ServiceBayBuilder.Default().Build();
 
-        var result = Allocate(Riverside([technician], [bay]), OilChange, London(Tuesday, serviceStart));
+        var result = Allocate(Riverside([technician], [bay]), OilChange, TimeOn(Tuesday, serviceStart));
 
         AssertAllocated(technician, bay, result);
     }
@@ -150,7 +149,7 @@ public sealed class SlotAllocatorTests
         var technician = TechnicianBuilder.Default().OffShiftOn(DayOfWeek.Saturday).Build();
         var bay = ServiceBayBuilder.Default().Build();
 
-        var result = Allocate(Riverside([technician], [bay]), OilChange, London(Saturday, "10:00"));
+        var result = Allocate(Riverside([technician], [bay]), OilChange, TimeOn(Saturday, "10:00"));
 
         AssertFails(BookingErrors.NoQualifiedTechnicianAvailable, result);
     }
@@ -343,7 +342,7 @@ public sealed class SlotAllocatorTests
         var evTechnician = TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General, Skills.EV).Build();
         var generalist = TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General).Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().TechnicianBusy(generalist, London(Tuesday, "12:00"), 360).Build();
+        var busy = BusyIntervalsBuilder.None().TechnicianBusy(generalist, TimeOn(Tuesday, "12:00"), 360).Build();
 
         var result = Allocate(Riverside([evTechnician, generalist], [bay]), OilChange, TuesdayTen, busy);
 
@@ -358,8 +357,8 @@ public sealed class SlotAllocatorTests
         var quieterTechnician = TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General).Build();
         var bay = ServiceBayBuilder.Default().Build();
         var busy = BusyIntervalsBuilder.None()
-            .TechnicianBusy(busierTechnician, London(Tuesday, "13:00"), 120)
-            .TechnicianBusy(quieterTechnician, London(Tuesday, "15:00"), 60)
+            .TechnicianBusy(busierTechnician, TimeOn(Tuesday, "13:00"), 120)
+            .TechnicianBusy(quieterTechnician, TimeOn(Tuesday, "15:00"), 60)
             .Build();
 
         var result = Allocate(Riverside([busierTechnician, quieterTechnician], [bay]), OilChange, TuesdayTen, busy);
@@ -374,7 +373,7 @@ public sealed class SlotAllocatorTests
         var alignmentTechnician = TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General, Skills.Alignment).Build();
         var evTechnician = TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General, Skills.EV).Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var busy = BusyIntervalsBuilder.None().TechnicianBusy(alignmentTechnician, London(Tuesday, "14:00"), 60).Build();
+        var busy = BusyIntervalsBuilder.None().TechnicianBusy(alignmentTechnician, TimeOn(Tuesday, "14:00"), 60).Build();
 
         var result = Allocate(Riverside([alignmentTechnician, evTechnician], [bay]), OilChange, TuesdayTen, busy);
 
@@ -389,8 +388,8 @@ public sealed class SlotAllocatorTests
         var technicianOne = TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build();
         var bay = ServiceBayBuilder.Default().Build();
         var busy = BusyIntervalsBuilder.None()
-            .TechnicianBusy(technicianTwo, London(Tuesday, "14:00"), 60)
-            .TechnicianBusy(technicianOne, London(Tuesday, "15:00"), 60)
+            .TechnicianBusy(technicianTwo, TimeOn(Tuesday, "14:00"), 60)
+            .TechnicianBusy(technicianOne, TimeOn(Tuesday, "15:00"), 60)
             .Build();
 
         var result = Allocate(Riverside([technicianTwo, technicianOne], [bay]), OilChange, TuesdayTen, busy);
@@ -398,30 +397,22 @@ public sealed class SlotAllocatorTests
         AssertAllocated(technicianOne, bay, result);
     }
 
-    // EC-70: workload is counted on the dealership's local date (ADR-0002 #20). Auckland is UTC+13 in
-    // November. The request, Tue 10 Nov 10:00 local, is Mon 9 Nov 21:00 UTC.
-    // - Mon 14:00-17:00 local is Mon 01:00-04:00 UTC: same UTC date as the request, another local date.
-    // - Tue 14:00-15:00 local is Tue 01:00-02:00 UTC: another UTC date, the request's local date.
-    // Counting the UTC date would wrongly make bookedOnUtcDateOnly the busier technician.
+    // EC-29: workload is counted on the date of the request (ADR-0002 #20). Counting every booking would
+    // wrongly make bookedOnAnotherDate the busier technician.
     [Fact]
-    public void Allocate_InAuckland_CountsOnlyThatLocalWorkingDaysBookingsAsWorkload()
+    public void Allocate_WhenTechnicianIsBusierOnAnotherDate_CountsOnlyThatDatesBookingsAsWorkload()
     {
-        var bookedOnLocalDate = TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build();
-        var bookedOnUtcDateOnly = TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General).Build();
+        var bookedOnThatDate = TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build();
+        var bookedOnAnotherDate = TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General).Build();
         var bay = ServiceBayBuilder.Default().Build();
-        var dealership = DealershipBuilder.Default()
-            .InTimeZone("Pacific/Auckland")
-            .WithTechnicians(bookedOnLocalDate, bookedOnUtcDateOnly)
-            .WithBays(bay)
-            .Build();
         var busy = BusyIntervalsBuilder.None()
-            .TechnicianBusy(bookedOnUtcDateOnly, Instant("2026-11-09T14:00:00+13:00"), 180)
-            .TechnicianBusy(bookedOnLocalDate, Instant("2026-11-10T14:00:00+13:00"), 60)
+            .TechnicianBusy(bookedOnAnotherDate, TimeOn(Monday, "14:00"), 180)
+            .TechnicianBusy(bookedOnThatDate, TimeOn(Tuesday, "14:00"), 60)
             .Build();
 
-        var result = Allocate(dealership, OilChange, Instant("2026-11-10T10:00:00+13:00"), busy);
+        var result = Allocate(Riverside([bookedOnThatDate, bookedOnAnotherDate], [bay]), OilChange, TuesdayTen, busy);
 
-        AssertAllocated(bookedOnUtcDateOnly, bay, result);
+        AssertAllocated(bookedOnAnotherDate, bay, result);
     }
 
     // EC-71: specialised jobs are bookable (ADR-0002 #9). A generalist and a Standard bay are also free, with
@@ -462,19 +453,17 @@ public sealed class SlotAllocatorTests
     private static Dealership Riverside(Technician[] technicians, ServiceBay[] bays) =>
         DealershipBuilder.Default().WithTechnicians(technicians).WithBays(bays).Build();
 
-    private static Result<Allocation> Allocate(Dealership dealership, ServiceType serviceType, DateTimeOffset start) =>
+    private static Result<Allocation> Allocate(Dealership dealership, ServiceType serviceType, DateTime start) =>
         Allocate(dealership, serviceType, start, BusyIntervals.None);
 
-    private static Result<Allocation> Allocate(Dealership dealership, ServiceType serviceType, DateTimeOffset start, BusyIntervals busy)
+    private static Result<Allocation> Allocate(Dealership dealership, ServiceType serviceType, DateTime start, BusyIntervals busy)
     {
         var allocator = new SlotAllocator(new BestFitBayPolicy(), new BestFitTechnicianPolicy());
 
         return allocator.Allocate(new AllocationRequest(dealership, serviceType, TimeSlot.Create(start, serviceType.Duration), busy));
     }
 
-    private static DateTimeOffset London(DateOnly date, string time) => BookingRequestBuilder.Local(date, time);
-
-    private static DateTimeOffset Instant(string iso) => DateTimeOffset.Parse(iso, CultureInfo.InvariantCulture);
+    private static DateTime TimeOn(DateOnly date, string time) => BookingRequestBuilder.TimeOn(date, time);
 
     private static void AssertAllocated(Technician technician, ServiceBay bay, Result<Allocation> result)
     {

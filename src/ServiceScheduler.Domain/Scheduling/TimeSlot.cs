@@ -1,30 +1,29 @@
 namespace ServiceScheduler.Domain.Scheduling;
 
-/// <summary>A half-open UTC interval <c>[StartUtc, EndUtc)</c>.</summary>
+/// <summary>A half-open interval <c>[Start, End)</c> on the one clock (ADR-0002 #25).</summary>
 public sealed record TimeSlot
 {
-    private TimeSlot(DateTimeOffset startUtc, DateTimeOffset endUtc)
+    private TimeSlot(DateTime start, DateTime end)
     {
-        StartUtc = startUtc;
-        EndUtc = endUtc;
+        Start = start;
+        End = end;
     }
 
-    public DateTimeOffset StartUtc { get; }
+    public DateTime Start { get; }
 
-    public DateTimeOffset EndUtc { get; }
+    public DateTime End { get; }
 
-    public TimeSpan Duration => EndUtc - StartUtc;
+    public TimeSpan Duration => End - Start;
 
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="duration"/> is not positive. Durations come from configured service types,
     /// so this is a programming error, not a business rejection.
     /// </exception>
-    public static TimeSlot Create(DateTimeOffset start, TimeSpan duration)
+    public static TimeSlot Create(DateTime start, TimeSpan duration)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
 
-        var startUtc = start.ToUniversalTime();
-        return new TimeSlot(startUtc, startUtc + duration);
+        return new TimeSlot(start, start + duration);
     }
 
     // Half-open: slots that only touch (one ends as the other starts) do not overlap.
@@ -32,6 +31,6 @@ public sealed record TimeSlot
     {
         ArgumentNullException.ThrowIfNull(other);
 
-        return StartUtc < other.EndUtc && other.StartUtc < EndUtc;
+        return Start < other.End && other.Start < End;
     }
 }

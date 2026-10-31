@@ -9,18 +9,15 @@ public sealed class Dealership : IEquatable<Dealership>
     /// data, rejected here so rule 3 and the allocator never need to filter for it (ADR-0002 #21).</exception>
     public Dealership(
         DealershipId id,
-        TimeZoneInfo timeZone,
         WeeklySchedule openingHours,
         IEnumerable<Technician> technicians,
         IEnumerable<ServiceBay> bays)
     {
-        ArgumentNullException.ThrowIfNull(timeZone);
         ArgumentNullException.ThrowIfNull(openingHours);
         ArgumentNullException.ThrowIfNull(technicians);
         ArgumentNullException.ThrowIfNull(bays);
 
         Id = id;
-        TimeZone = timeZone;
         OpeningHours = openingHours;
         Technicians = [.. technicians];
         Bays = [.. bays];
@@ -38,15 +35,13 @@ public sealed class Dealership : IEquatable<Dealership>
 
     public DealershipId Id { get; }
 
-    public TimeZoneInfo TimeZone { get; }
-
     public WeeklySchedule OpeningHours { get; }
 
     public IReadOnlyCollection<Technician> Technicians { get; }
 
     public IReadOnlyCollection<ServiceBay> Bays { get; }
 
-    public bool IsOpenFor(TimeSlot slot) => OpeningHours.Covers(slot, TimeZone);
+    public bool IsOpenFor(TimeSlot slot) => OpeningHours.Covers(slot);
 
     public bool Equals(Dealership? other) => other is not null && Id == other.Id;
 
