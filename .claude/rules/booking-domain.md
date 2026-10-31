@@ -102,7 +102,7 @@ resource on a job that a less specialised one can do.
 
 ## Idempotency
 
-`POST /appointments` accepts an `Idempotency-Key`; keys are global.
+`POST /api/appointments` accepts an `Idempotency-Key`; keys are global.
 
 - Same key, same payload (`request_hash`) â†’ return the stored appointment **in its current state**
   (including `Cancelled`).
@@ -132,4 +132,6 @@ start times at or before now are excluded. Unknown dealership or service type â†
 Authentication, notifications, payments, rescheduling, multi-technician jobs, multi-day jobs,
 technician leave or sickness, public holidays and one-off closures, split shifts and lunch breaks,
 `Completed` / no-show statuses, customer self-service portal, authorised drivers for company/lease/fleet
-vehicles (ADR-0002 #16).
+vehicles (ADR-0002 #16), managing resources and technician job views (seeded data, ADR-0002 #22).
+
+Rules above that are parked until the core works are listed in ADR-0002, *Delivery order*.

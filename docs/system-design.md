@@ -4,7 +4,7 @@
 |---|---|
 | **Scenario** | A: The Unified Service Scheduler (Ownership domain) |
 | **Implemented layer** | Backend (REST API + PostgreSQL). Client represented by an OpenAPI contract, a `.http` file and an optional thin demo page |
-| **Status** | v1.0. Assumptions in [ADR-0002](adr/0002-scope-and-business-assumptions.md) *Accepted* provisionally, to be revisited after testing; edge cases in the [catalogue](edge-cases.md) |
+| **Status** | v1.0. Assumptions in [ADR-0002](adr/0002-scope-and-business-assumptions.md) *Accepted* provisionally, to be revisited after testing; edge cases in the [catalogue](edge-cases.md). This document describes the target design; the build order and the parts parked until the core works (including availability, cancellation and idempotency) are in ADR-0002, *Delivery order* |
 
 **Contents**
 
@@ -33,6 +33,24 @@ Dealership service departments still book work by phone, paper and spreadsheets.
 double-booked bays, jobs given to technicians who are not certified for them, and idle capacity
 elsewhere in the day. Every lost workshop hour is lost revenue.
 
+### Users and personas
+
+| Persona | Role in this system |
+|---|---|
+| **Service Advisor** (primary) | Books appointments at a dealership on behalf of customers, by phone or at the counter. This replaces today's manual process |
+| **Vehicle owner** (future) | Books online for themselves. The booking core does not depend on the channel; only the API and authentication layer differs |
+| **Workshop Manager** (supporting) | Reads operational dashboards; does not book |
+
+**Out of scope:** managing resources (bays, technicians, opening hours) and technician job views. Seeded data is used instead.
+
+### User stories
+
+| # | As a Service Advisor, I want to… | So that… | Delivered by |
+|---|---|---|---|
+| US1 | Book a customer's vehicle at the time the customer asks for | I do not have to search bay and technician schedules myself | R1, R3, automatic allocation |
+| US2 | Know immediately when that time has no capacity | I can offer another time while still on the phone with the customer | R2, `409` with the reason and alternatives (ADR-0002 #3) |
+| US3 | Be sure a confirmed appointment cannot clash with anyone else's | The customer does not have to wait on arrival | Exclusion constraints ([ADR-0001](adr/0001-database-enforces-no-double-booking.md)) |
+
 ### Requirements (from the brief)
 
 | # | Requirement | How this design meets it |
@@ -51,7 +69,7 @@ elsewhere in the day. Every lost workshop hour is lost revenue.
 ### Out of scope
 
 Authentication, notifications, payments, rescheduling, multi-technician or multi-day jobs, technician
-leave, customer self-service portal. See [§14](#14-future-work) for how the design accommodates them.
+leave, customer self-service portal, resource management and technician job views. See [§14](#14-future-work) for how the design accommodates them.
 
 ---
 
@@ -304,6 +322,7 @@ classDiagram
     class ServiceBay {
         <<Entity>>
         +ServiceBayId Id
+        +DealershipId DealershipId
         +string Name
         +BayType Type
         +bool IsActive
@@ -313,6 +332,7 @@ classDiagram
     class Technician {
         <<Entity>>
         +TechnicianId Id
+        +DealershipId DealershipId
         +string Name
         +IReadOnlySet~Skill~ Skills
         +WeeklySchedule Shifts

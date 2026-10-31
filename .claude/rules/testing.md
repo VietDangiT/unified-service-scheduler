@@ -14,7 +14,7 @@ starts with a test that reproduces the bug.
 - The right reason is an assertion on the specified outcome, or `NotImplementedException` from a member
   added for this behaviour. A new test that passes immediately is reported as already covered; it is
   never reshaped until it fails.
-- Once the developer approves red tests they are frozen (Arrange, Act and Assert, and the builders they
+- Once red tests are approved (`CLAUDE.md`, flow step 3) they are frozen (Arrange, Act and Assert, and the builders they
   use). Changing one afterwards needs the developer's approval and a stated reason.
 - Mutations are designed from the business boundaries (by the orchestrator from the `domain-analyst`
   scenarios, or by the developer on the solo `/tdd` path), not by whoever wrote the tests being graded.

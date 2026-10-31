@@ -78,11 +78,13 @@ Flow for each step (⏸ = developer approval):
    the orchestrator records the decisions (ADR, `booking-domain.md`) and adds the `EC-` rows.
 2. **Package:** the orchestrator writes the work package: scope, scenarios with `EC-` ids and sources,
    the mutations the tests must catch (from the analyst's boundaries), and any extras such as a package
-   or API change → ⏸ developer approves the package.
+   or API change. ⏸ only if it needs a NuGet package, an API contract change or a business decision.
 3. **Red:** `implementer` phase `red` → orchestrator checks each test fails for the expected reason and
-   `domain-analyst` checks the tests express the scenarios → ⏸ developer approves the tests →
-   orchestrator stages `tests/` (`git add tests/`) and records the fingerprint
-   `git diff --cached -- tests/ | git hash-object --stdin`, so the approved tests are frozen.
+   `domain-analyst` checks the tests express the scenarios. The tests are approved automatically when the
+   analyst says "ready" with no open questions and the orchestrator's checks pass; otherwise ⏸ escalate
+   to the developer. A test that closes a gap in correct code passes at once ("already covered"); it
+   qualifies when a packaged mutation fails against it. Once approved either way, the orchestrator stages `tests/` (`git add tests/`) and
+   records the fingerprint `git diff --cached -- tests/ | git hash-object --stdin`, so the tests are frozen.
 4. **Green:** `implementer` phase `green` → orchestrator verifies itself, never trusting reported numbers:
    the fingerprint is unchanged, `git diff -- tests/` and `git status --short tests/` show no change to
    approved tests or builders (new builder methods only), the `mutate.ps1` diff contains the packaged
@@ -91,10 +93,8 @@ Flow for each step (⏸ = developer approval):
    defers. A finding that needs a new test becomes a new `red` package; an approved test change is
    re-staged and re-fingerprinted. Repeat flow steps 4–5 until clean.
 6. **Commit:** orchestrator updates docs and `/ai-log`, commits on the `feature/*` branch → ⏸ developer
-   approves the push.
+   approves the push and reviews the pull request before merge.
 7. **Audit:** `test-auditor` after project step 5 (database constraints and concurrency) and before submission.
-
-For a very small package the developer may approve the package and its red tests in one go.
 
 Ownership: the developer decides business rules; the orchestrator owns rules, ADRs, design docs, the
 catalogue rows, the AI log and git; the `implementer` owns `src/`, `tests/`, `tools/mutation/` mutations
@@ -111,7 +111,7 @@ Branches: `feature/*` from `dev`, pull request into `dev`; `dev` merges into `ma
 ## Working agreement for AI agents
 
 1. **Plan first** for anything beyond a trivial edit: state the approach, the files affected and the
-   edge cases from `docs/edge-cases.md` it covers. Wait for approval before writing code.
+   edge cases from `docs/edge-cases.md` it covers. Wait for approval where the flow above marks ⏸.
 2. **TDD:** write the failing test, run it red, implement the minimum to pass, refactor.
    At the start of each step, run the `domain-analyst` agent to derive the business scenarios to test;
    the developer decides its open questions before tests are written.

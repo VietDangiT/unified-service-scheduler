@@ -93,3 +93,22 @@ Tools: Claude Code (primary agent).
     - Fixed in the repo: the mutation script now lives at `tools/mutation/mutate.ps1` and always works on a temporary copy.
     - Deferred: the `DealershipTimeZone` value object.
 - **Lesson:** mutation testing only finds the bugs you think of. A domain expert finds the situations nobody thought of, and accepted cases need as much variety as rejected ones. Requiring reviewers to cite a rule also exposes where the rules themselves are wrong.
+
+### 2026-10-31: Business rule review; cut the plan to the core
+- **Phase:** design
+- **I asked the AI to:** walk me through every business rule in plain Vietnamese, separating what comes from the brief from what it had assumed.
+- **The AI produced:** a review of validation rules 1–9 and ADR-0002 #1–21, recommending I keep all of them.
+- **What I accepted, changed or rejected, and why:** I told the AI not to push scope too far. The plan is now allocation, database and `POST`, constraints and the concurrency test, then Docker, README and the video; everything else is parked (ADR-0002 *Delivery order*). I briefly changed #1 so that customers book for themselves, and the AI updated the ADR, rules and design document to match. I then reversed it: the service advisor stays the main user, and those edits were undone. After consulting another source I added a *Users and personas* section (vehicle owner as a future channel; resource management out of scope) and wrote three user stories. Story US2 made the AI move alternatives in the `409` out of the parked list.
+- **How I verified it:** the AI reviewed its own diff before undoing the edits, so only the customer wording was reverted. The step 3 tests were unaffected (fingerprint unchanged).
+- **Lesson:** a change of business actor reaches many documents, so settle it before editing them.
+
+### 2026-10-31: Step 3 allocation: review found a gap that 37 of 37 mutations missed
+- **Phase:** implementation (TDD), step 3
+- **I asked the AI to:** implement allocation against the frozen red tests, then verify and review it through the orchestrated flow.
+- **The AI produced:** `SlotAllocator`, the best-fit policies and rule 3. The implementer reported all tests passing and all mutations killed; the orchestrator re-ran both itself and got the same result. `code-reviewer` found no booking-rule bug in the code but raised 3 major findings:
+  - No test ever accepted a specialised job. Every EV test expected a rejection, so a bug refusing all EV and Alignment jobs would pass the whole suite.
+  - The design document listed alternatives as parked while the ADR scheduled them.
+  - The orchestrator's own rewording of the approval gates left the automatic path with no step that freezes the tests, and contradicted three other files.
+- **What I accepted, changed or rejected, and why:** the orchestrator fixed all three. The new tests (EC-71) first used a dealership with only specialists; `domain-analyst` answered "not ready" because a rule 3 bug at a normal mixed dealership would still pass, so the tests were changed before being frozen. The orchestrator also had a combined mutation split in two, because killing one half proved nothing about the other. Minor findings went to *Deferred* in `docs/edge-cases.md` rather than growing the scope.
+- **How I verified it:** the orchestrator re-ran the gate: 114/114 unit tests, 41/41 mutations, tests fingerprint unchanged, format clean. Integration tests were not run: Docker is off and the project has no tests yet. A second `code-reviewer` pass reported no remaining blocker or major.
+- **Lesson:** a perfect mutation score only grades the mutations someone thought of. All 37 passed while a whole class of accepted jobs was untested, so accepted cases must be reviewed from the business side too.
