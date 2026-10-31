@@ -109,3 +109,8 @@ Major finding: every test with a specialised job expects a rejection, so a bug r
   rule 3 requires **all** technicians and bays to match instead of **any**.
 
 The other review findings are in `docs/edge-cases.md`, *Deferred*.
+
+## After delivery
+
+On 2026-10-31 the developer removed some tests and their mutations, including `DealershipTests.cs` and mutations 9
+and 11 above, to focus on the end-to-end flow (see `docs/edge-cases.md`, *Deferred*). This package is a historical record.

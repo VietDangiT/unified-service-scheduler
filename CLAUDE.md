@@ -78,7 +78,8 @@ Flow for each step (⏸ = developer approval):
    the orchestrator records the decisions (ADR, `booking-domain.md`) and adds the `EC-` rows.
 2. **Package:** the orchestrator writes the work package: scope, scenarios with `EC-` ids and sources,
    the mutations the tests must catch (from the analyst's boundaries), and any extras such as a package
-   or API change. ⏸ only if it needs a NuGet package, an API contract change or a business decision.
+   or API change. ⏸ the developer sees the main scenarios in plain language before any test is written,
+   and approves any NuGet package, API contract change or business decision.
 3. **Red:** `implementer` phase `red` → orchestrator checks each test fails for the expected reason and
    `domain-analyst` checks the tests express the scenarios. The tests are approved automatically when the
    analyst says "ready" with no open questions and the orchestrator's checks pass; otherwise ⏸ escalate

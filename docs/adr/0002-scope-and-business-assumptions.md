@@ -42,7 +42,8 @@ The brief is deliberately ambiguous. These assumptions turn it into a buildable,
 Core first, then the rest (decided by the developer on 2026-10-31):
 
 1. Allocation in the domain (step 3).
-2. Database and `POST /api/appointments` (step 4).
+2. Database and `POST /api/appointments` (step 4): the straight path first, an advisor books and the appointment
+   is saved, end to end. Rejections and other branches follow once that path works.
 3. Exclusion constraints and the concurrency test (step 5).
 4. Alternatives in the `409`, so the advisor can offer another time on the phone (user story US2).
 5. Docker, README and the video.

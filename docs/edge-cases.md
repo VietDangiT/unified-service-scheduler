@@ -7,8 +7,8 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-01 | Back-to-back bookings (10:00–11:00 then 11:00–12:00) on the same technician/bay | Both succeed (half-open intervals) | Unit + Integration | Unit: `TimeSlotTests.Overlaps_WhenSlotsAreBackToBack_ReturnsFalse`, `Overlaps_WhenSlotsAreApart_ReturnsFalse`, `SlotAllocatorTests.Allocate_WhenTechniciansJobsAreBackToBack_ChoosesThatTechnician`, `…_WhenBaysJobsAreBackToBack_ChoosesThatBay`. Integration: TBD |
-| EC-02 | Requested interval partially overlaps an existing confirmed appointment (technician A busy 09:30–10:30, request 10:00–11:00; same for a bay) | Resource is not eligible: another free one is chosen, or `409` if it was the only one | Unit | `TimeSlotTests.Overlaps_WhenSlotsShareAnyInstant_ReturnsTrue`, `SlotAllocatorTests.Allocate_WhenBestFitTechnicianIsBusyForPartOfService_ChoosesAnotherQualifiedTechnician`, `…_WhenOnlyTechnicianHasAnOverlappingJob_ReturnsNoQualifiedTechnicianAvailable`, `…_WhenBestFitBayIsBusyForPartOfService_ChoosesAnotherCompatibleBay`, `…_WhenOnlyBayHasAnOverlappingJob_ReturnsNoCompatibleBayAvailable` |
+| EC-01 | Back-to-back bookings (10:00–11:00 then 11:00–12:00) on the same technician/bay | Both succeed (half-open intervals) | Unit + Integration | Unit: `SlotAllocatorTests.Allocate_WhenTechniciansJobsAreBackToBack_ChoosesThatTechnician`, `…_WhenBaysJobsAreBackToBack_ChoosesThatBay`. Integration: TBD |
+| EC-02 | Requested interval partially overlaps an existing confirmed appointment (technician A busy 09:30–10:30, request 10:00–11:00; same for a bay) | Resource is not eligible: another free one is chosen, or `409` if it was the only one | Unit | `SlotAllocatorTests.Allocate_WhenBestFitTechnicianIsBusyForPartOfService_ChoosesAnotherQualifiedTechnician`, `…_WhenOnlyTechnicianHasAnOverlappingJob_ReturnsNoQualifiedTechnicianAvailable`, `…_WhenBestFitBayIsBusyForPartOfService_ChoosesAnotherCompatibleBay`, `…_WhenOnlyBayHasAnOverlappingJob_ReturnsNoCompatibleBayAvailable` |
 | EC-04 | Service would end after the only qualified technician's shift (shift 08:00–17:00: 16:30 for 60 min rejected, 16:00 for 60 min booked); shift starting after opening (09:00 vs 08:00, request 08:00) | `409 NoQualifiedTechnicianAvailable` / booked at the boundary | Unit | `SlotAllocatorTests.Allocate_WhenServiceDoesNotFitOnlyTechniciansShift_ReturnsNoQualifiedTechnicianAvailable`, `…_WhenServiceStartsAtShiftStartOrEndsAtShiftEnd_ChoosesThatTechnician` |
 | EC-05 | Technician qualified but no compatible bay type free (EV job, EV bay busy, Standard bays free) | `409 NoCompatibleBayAvailable` | Unit | `SlotAllocatorTests.Allocate_WhenEvJobAndOnlyEvBayIsBusy_ReturnsNoCompatibleBayAvailable` |
 | EC-06 | Bay free but no technician with the required skill free (only EV technician busy, General-only free) | `409 NoQualifiedTechnicianAvailable` | Unit | `SlotAllocatorTests.Allocate_WhenEvJobAndOnlyEvTechnicianIsBusy_ReturnsNoQualifiedTechnicianAvailable` |
@@ -17,7 +17,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | EC-23 | Technician has no shift on that weekday (only qualified technician, Saturday) | Not eligible → `409 NoQualifiedTechnicianAvailable` | Unit | `SlotAllocatorTests.Allocate_WhenOnlyQualifiedTechnicianHasNoShiftThatWeekday_ReturnsNoQualifiedTechnicianAvailable` |
 | EC-62 | Standard job at a dealership with only Lift and EV bays | Service is offered (no 422); a Lift bay is used | Unit | `BookingValidatorTests.Validate_WhenStandardJobAndOnlyLiftAndEvBaysExist_IsAccepted`, `SlotAllocatorTests.Allocate_WhenStandardJobAndOnlyLiftAndEvBaysExist_ChoosesLiftBay` |
 | EC-63 | An inactive technician or bay that would otherwise win (fewer skills, lower ID) | Never chosen | Unit | `SlotAllocatorTests.Allocate_WhenBestFitTechnicianIsInactive_ChoosesAnActiveTechnician`, `…_WhenBestFitBayIsInactive_ChoosesAnActiveBay` |
-| EC-64 | A technician or bay of another dealership is passed to the `Dealership` aggregate | Rejected at construction (ADR-0002 #21), so it can never be chosen; EC-46 is the database backstop | Unit | `DealershipTests.Constructor_WhenATechnicianBelongsToAnotherDealership_ThrowsArgumentException`, `…_WhenABayBelongsToAnotherDealership_ThrowsArgumentException` |
+| EC-64 | A technician or bay of another dealership is passed to the `Dealership` aggregate | Rejected at construction (ADR-0002 #21), so it can never be chosen; EC-46 is the database backstop | Unit | TBD |
 | EC-65 | Neither a qualified technician nor a compatible bay is free | `409 NoQualifiedTechnicianAvailable` (ADR-0002 #17) | Unit | `SlotAllocatorTests.Allocate_WhenNeitherTechnicianNorBayIsFree_ReturnsNoQualifiedTechnicianAvailable` |
 | EC-69 | Skilled, active technician with no shift on any weekday | Service still offered; booking gets `409 NoQualifiedTechnicianAvailable` (ADR-0002 #19) | Unit | `BookingValidatorTests.Validate_WhenSkilledTechnicianHasNoShifts_IsAccepted`, `SlotAllocatorTests.Allocate_WhenOnlySkilledTechnicianHasNoShiftsAtAll_ReturnsNoQualifiedTechnicianAvailable` |
 | EC-24 | Shift extends beyond opening hours (07:00–19:00 vs 08:00–18:00), request at 07:30 | `422 OutsideOpeningHours`: the job must fit both | Unit | `BookingValidatorTests.Validate_WhenBookingIsBeforeOpeningButInsideTechniciansShift_ReturnsOutsideOpeningHours` |
@@ -43,7 +43,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-03 | Service does not fit inside that day's opening hours (ends after closing, starts before opening, longer than the day, or runs past local midnight) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenServiceDoesNotFitOpeningHours_…`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…`, `…_WhenServiceTouchesOpeningOrClosingTime_IsAccepted`, `…_DuringSummerTime_…` (2), `…_AucklandMondayMorning_IsBookable`, `…_AucklandSundayMorning_IsClosed`, `…_WhenAucklandServiceRunsPastLocalMidnight_…`, `WeeklyScheduleTests` |
+| EC-03 | Service does not fit inside that day's opening hours (ends after closing, starts before opening, longer than the day, or runs past local midnight) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenServiceDoesNotFitOpeningHours_…`, `…_WhenSaturdayServiceIsOutsideSaturdayHours_…`, `…_WhenServiceTouchesOpeningOrClosingTime_IsAccepted` |
 | EC-09 | Requested start is now or earlier (compared as instants) | `422 StartInPast` | Unit | `BookingValidatorTests.Validate_WhenStartIsNowOrEarlier_ReturnsStartInPast`, `…_WhenAucklandMorningIsAlreadyOverInLondon_ReturnsStartInPast` |
 | EC-10 | Requested start not on the dealership's 15-minute grid (10:10; or 10:00+00:10 = 09:50 local) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartIsBetweenQuarterHours_…`, `…_WhenRequestOffsetHidesAnOffGridLocalTime_…` |
 | EC-19 | Unknown customer / vehicle / service type / dealership | `404` | Integration | TBD |
@@ -52,7 +52,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | EC-31 | `requestedStart` with seconds or milliseconds (`10:00:30`) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartHasSecondsOrMilliseconds_ReturnsStartNotOnGrid` |
 | EC-32 | `requestedStart` beyond the 90-day horizon | `422 BeyondBookingHorizon` | Unit | TBD |
 | EC-33 | Dealership closed that weekday (no opening-hours row) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenDealershipIsClosedThatWeekday_ReturnsOutsideOpeningHours` |
-| EC-34 | Request violates several rules at once (past **and** off-grid) | First error in the documented order (`StartInPast`) | Unit | `BookingValidatorTests.Validate_WhenStartIsInPastAndOffGrid_ReturnsStartInPast`, `Validate_WhenVehicleNotOwnedAndStartInPast_…`, `Validate_WhenStartIsOffGridAndBeforeOpening_ReturnsStartNotOnGrid`, `Validate_WhenVehicleNotOwnedAndServiceNotOffered_ReturnsVehicleNotOwnedByCustomer`, `Validate_WhenServiceNotOfferedAndStartInPast_ReturnsServiceNotOfferedAtDealership`, `Validate_WhenServiceNotOfferedAndDealershipClosedThatDay_ReturnsServiceNotOfferedAtDealership` (extended as rules 5, 8, 9 are added) |
+| EC-34 | Request violates several rules at once (past **and** off-grid) | First error in the documented order (`StartInPast`) | Unit | TBD |
 | EC-35 | `Idempotency-Key` empty or longer than 64 characters | `400` | Integration | TBD |
 | EC-58 | Same-day walk-in: at 09:00 the advisor books 09:15 (or 14:00) today | Accepted; no minimum notice (ADR-0002 #14) | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
 | EC-59 | Quarter-hour starts 10:15, 10:30, 10:45 | Accepted (grid is 15 minutes, not hourly) | Unit | `BookingValidatorTests.Validate_WhenBookingFollowsEveryRule_IsAccepted` |
@@ -63,7 +63,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-11 | Request sent in another offset (`07:30+00:00` in BST = 08:30 London; `17:30+00:00` = 18:30) | The instant counts: 08:30 accepted, 18:30 `422 OutsideOpeningHours`; response `localStart` shows local time | Unit (+ API for `localStart`) | Validation: `…_WhenBookingFollowsEveryRule_IsAccepted`, `…_WhenUtcTimeIsAfterClosingInLocalSummerTime_…`. `localStart`: TBD |
+| EC-11 | Request sent in another offset (`07:30+00:00` in BST = 08:30 London; `17:30+00:00` = 18:30) | The instant counts: 08:30 accepted, 18:30 `422 OutsideOpeningHours`; response `localStart` shows local time | Unit (+ API for `localStart`) | Validation: `…_WhenBookingFollowsEveryRule_IsAccepted`. `localStart`: TBD |
 | EC-12 | Booking on a DST transition day | End = start + duration in elapsed (UTC) time | Unit | TBD |
 | EC-36 | Opening hours or shift spanning a DST change (London 00:00–06:00 on 2027-03-28 = 5 elapsed hours) | Fit is evaluated on the real interval | Unit | TBD |
 | EC-37 | Availability on a DST transition day | No duplicated or missing slot | Unit | TBD |
@@ -121,7 +121,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
-| EC-57 | Opening hours or shift with `closes ≤ opens` or `24:00` | Rejected by a `CHECK` constraint (and by `LocalTimeRange` in the domain) | Unit + Integration | Unit: `LocalTimeRangeTests.Constructor_WhenEndIsNotAfterStart_Throws`. Integration: TBD |
+| EC-57 | Opening hours or shift with `closes ≤ opens` or `24:00` | Rejected by a `CHECK` constraint (and by `LocalTimeRange` in the domain) | Unit + Integration | TBD |
 
 ## Deferred (known gaps, scheduled)
 
@@ -129,6 +129,7 @@ Findings from code reviews that were consciously postponed, with where they will
 
 | Gap | Planned in |
 |---|---|
+| **Tests removed by the developer on 2026-10-31** to focus on the end-to-end flow (time zones and summer time, error order, technical foundation; restore from commit `05172c2`). No test or mutation now protects: a resource of another dealership (EC-64; the allocator relies on this check), the weekday taken from local time, a job past local midnight (EC-03), the 18:30 summer-time rejection (EC-11), slots normalised to UTC, error order when several rules fail (EC-34, and the order part of EC-22), zero-length slots, empty opening ranges (EC-57), null results | After the end-to-end flow; EC-64 is backed by the foreign key (EC-46) in step 4 |
 | DST transition-day tests (EC-12, EC-36, EC-37): need Sunday opening hours via `DealershipBuilder.OpenOn` and explicit-offset starts | "Later" step (DST) |
 | Opening hours spanning a repeated local hour (clocks going back) can be misjudged because only the two ends are checked; decide "first occurrence" policy and record it in an ADR | "Later" step (DST) |
 | EF Core mapping for `TimeZoneInfo` (IANA ID converter) and `WeeklySchedule`; decide whether to wrap it in the `DealershipTimeZone` value object that `architecture.md` lists | Step 4 |
