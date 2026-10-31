@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using ServiceScheduler.Domain.Common;
+using ServiceScheduler.Domain.Dealerships;
 using ServiceScheduler.Domain.Scheduling;
 using ServiceScheduler.UnitTests.Builders;
 
@@ -297,6 +298,227 @@ public sealed class BookingValidatorTests
 
         AssertFails(BookingErrors.StartNotOnGrid, result);
     }
+
+    // EC-22: rule 3 is a static capability check. An EV job needs an EV bay; a Standard and a Lift bay do not count.
+    [Fact]
+    public void Validate_WhenDealershipHasNoBayOfTheRequiredType_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithSkills(Skills.General, Skills.EV).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.Lift).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-22: skills match exactly; a General-only technician cannot do an EV job.
+    [Fact]
+    public void Validate_WhenNoTechnicianHoldsTheRequiredSkill_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithSkills(Skills.General).Build())
+                .WithBays(ServiceBayBuilder.Default().OfType(BayType.EV).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-22: only active resources count.
+    [Fact]
+    public void Validate_WhenOnlyCompatibleBayIsInactive_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithSkills(Skills.General, Skills.EV).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.EV).Inactive().Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.Standard).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    [Fact]
+    public void Validate_WhenOnlySkilledTechnicianIsInactive_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(
+                    TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General, Skills.EV).Inactive().Build(),
+                    TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General).Build())
+                .WithBays(ServiceBayBuilder.Default().OfType(BayType.EV).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-22: no resources of the kind at all.
+    [Fact]
+    public void Validate_WhenDealershipHasNoBays_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().WithoutBays().Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    [Fact]
+    public void Validate_WhenDealershipHasNoTechnicians_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().WithoutTechnicians().Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-34: rule 2 (vehicle ownership) comes before rule 3.
+    [Fact]
+    public void Validate_WhenVehicleNotOwnedAndServiceNotOffered_ReturnsVehicleNotOwnedByCustomer()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().WithoutBays().Build())
+            .WithVehicleOwnedByAnotherCustomer()
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.VehicleNotOwnedByCustomer, result);
+    }
+
+    // EC-34: rule 3 comes before rule 4 (start in the past) and rule 7 (opening hours).
+    [Fact]
+    public void Validate_WhenServiceNotOfferedAndStartInPast_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().WithoutBays().Build())
+            .At(Monday, "08:00")
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    [Fact]
+    public void Validate_WhenServiceNotOfferedAndDealershipClosedThatDay_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().ClosedOn(DayOfWeek.Sunday).WithoutBays().Build())
+            .At(new DateOnly(2026, 11, 8), "10:00")
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-62: a Standard job can use any bay type (ADR-0002 #9), so Lift and EV bays make it offered.
+    [Fact]
+    public void Validate_WhenStandardJobAndOnlyLiftAndEvBaysExist_IsAccepted()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Lift).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.EV).Build())
+                .Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
+    }
+
+    // EC-69: rule 3 counts active technicians with the skill; shifts are not considered (ADR-0002 #19).
+    [Fact]
+    public void Validate_WhenSkilledTechnicianHasNoShifts_IsAccepted()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithNoShifts().Build())
+                .Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
+    }
+
+    // EC-24: a shift that starts before opening does not extend the bookable window.
+    [Fact]
+    public void Validate_WhenBookingIsBeforeOpeningButInsideTechniciansShift_ReturnsOutsideOpeningHours()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .OpenOn(DayOfWeek.Tuesday, "08:00", "18:00")
+                .WithTechnicians(TechnicianBuilder.Default().OnShift(DayOfWeek.Tuesday, "07:00", "19:00").Build())
+                .Build())
+            .At(Tuesday, "07:30")
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.OutsideOpeningHours, result);
+    }
+
+    // EC-71: specialised jobs are offered when the dealership has the matching technician and bay (ADR-0002 #9),
+    // even when a generalist and a Standard bay are listed first.
+    [Fact]
+    public void Validate_WhenEvJobAtDealershipWithMixedStaffAndBays_IsAccepted()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(
+                    TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build(),
+                    TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General, Skills.EV).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.EV).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
+    }
+
+    [Fact]
+    public void Validate_WhenAlignmentJobAtDealershipWithMixedStaffAndBays_IsAccepted()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .WithTechnicians(
+                    TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build(),
+                    TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General, Skills.Alignment).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.Alignment).Build())
+                .Build())
+            .WithServiceType(ServiceTypeBuilder.WheelAlignment().Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
+    }
+
+    private static BookingRequest EvCheckAt(DealershipBuilder dealership) =>
+        BookingRequestBuilder.Default()
+            .AtDealership(dealership.Build())
+            .WithServiceType(ServiceTypeBuilder.EvCheck().Build())
+            .Build();
 
     private static BookingRequestBuilder Auckland() =>
         BookingRequestBuilder.Default().AtDealership(DealershipBuilder.Default().InTimeZone("Pacific/Auckland").Build());

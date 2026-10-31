@@ -13,7 +13,7 @@ reject services a dealership can never perform. Pure, synchronous domain code; t
 dealership's resources and the busy intervals of confirmed appointments.
 
 **Out of scope:** persistence and exclusion constraints, the `23P01` retry loop, vehicle overlap (rule 8),
-alternatives (step 7), booking horizon (rule 5), buffers (assume 0; workload already uses the blocked
+alternatives (ADR-0002, *Delivery order* item 4), booking horizon (rule 5), buffers (assume 0; workload already uses the blocked
 interval so buffers slot in later), cancellation, idempotency, DST transition days.
 
 ## Shape (follow `docs/system-design.md` §5.1)
@@ -95,3 +95,17 @@ Developer decisions on 2026-10-30: keep the Strategy design (`IBayAllocationPoli
    (technician and bay), `…StartsAtShiftStartOrEndsAtShiftEnd…`,
    `…WhenEvAndAlignmentTechniciansAreFree_ChoosesTheLessBookedOne`,
    `…CountsOnlyThatLocalWorkingDaysBookingsAsWorkload`, `…WhenBookingIsBeforeOpeningButInsideTechniciansShift…`.
+
+## Revision 2, from the `code-reviewer` run of 2026-10-31
+
+Major finding: every test with a specialised job expects a rejection, so a bug refusing all such jobs passes.
+
+- **New tests, EC-71:** an EV job and an Alignment job, with the matching technician and bay free, pass
+  `BookingValidator.Validate` and are allocated to those resources. Production code is already correct, so
+  these are expected to pass immediately ("already covered").
+- **Validator setup (from the `domain-analyst` check):** the dealership is mixed, with a generalist (ID 1) and
+  the specialist (ID 2), a `Standard` bay (ID 1) and the matching bay (ID 2), as a normal dealership would be.
+- **New mutations:** a bay serves only `Standard` jobs; rule 3 rejects every job that is not `Standard`;
+  rule 3 requires **all** technicians and bays to match instead of **any**.
+
+The other review findings are in `docs/edge-cases.md`, *Deferred*.

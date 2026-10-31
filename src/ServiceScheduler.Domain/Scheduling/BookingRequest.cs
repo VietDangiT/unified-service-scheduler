@@ -1,5 +1,6 @@
 using ServiceScheduler.Domain.Customers;
 using ServiceScheduler.Domain.Dealerships;
+using ServiceScheduler.Domain.ServiceTypes;
 
 namespace ServiceScheduler.Domain.Scheduling;
 
@@ -9,4 +10,4 @@ public sealed record BookingRequest(
     Vehicle Vehicle,
     Dealership Dealership,
     DateTimeOffset RequestedStart,
-    TimeSpan ServiceDuration);
+    ServiceType ServiceType);

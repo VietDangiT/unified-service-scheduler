@@ -13,6 +13,8 @@ public sealed record TimeSlot
 
     public DateTimeOffset EndUtc { get; }
 
+    public TimeSpan Duration => EndUtc - StartUtc;
+
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="duration"/> is not positive. Durations come from configured service types,
     /// so this is a programming error, not a business rejection.

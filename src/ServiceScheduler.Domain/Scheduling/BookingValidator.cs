@@ -1,4 +1,6 @@
 using ServiceScheduler.Domain.Common;
+using ServiceScheduler.Domain.Dealerships;
+using ServiceScheduler.Domain.ServiceTypes;
 
 namespace ServiceScheduler.Domain.Scheduling;
 
@@ -15,11 +17,14 @@ public static class BookingValidator
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var zone = request.Dealership.TimeZone;
-
         if (request.Vehicle.OwnerId != request.CustomerId)
         {
             return Result.Failure<TimeSlot>(BookingErrors.VehicleNotOwnedByCustomer);
+        }
+
+        if (!IsOffered(request.Dealership, request.ServiceType))
+        {
+            return Result.Failure<TimeSlot>(BookingErrors.ServiceNotOfferedAtDealership);
         }
 
         if (request.RequestedStart <= now)
@@ -27,20 +32,25 @@ public static class BookingValidator
             return Result.Failure<TimeSlot>(BookingErrors.StartInPast);
         }
 
-        if (!IsOnGrid(request.RequestedStart, zone))
+        if (!IsOnGrid(request.RequestedStart, request.Dealership.TimeZone))
         {
             return Result.Failure<TimeSlot>(BookingErrors.StartNotOnGrid);
         }
 
-        var slot = TimeSlot.Create(request.RequestedStart, request.ServiceDuration);
+        var slot = TimeSlot.Create(request.RequestedStart, request.ServiceType.Duration);
 
-        if (!request.Dealership.OpeningHours.Covers(slot, zone))
+        if (!request.Dealership.IsOpenFor(slot))
         {
             return Result.Failure<TimeSlot>(BookingErrors.OutsideOpeningHours);
         }
 
         return Result.Success(slot);
     }
+
+    // A static capability check: shifts and bookings are not considered (ADR-0002 #19).
+    private static bool IsOffered(Dealership dealership, ServiceType serviceType) =>
+        dealership.Technicians.Any(technician => technician.IsActive && technician.IsQualifiedFor(serviceType.RequiredSkill))
+        && dealership.Bays.Any(bay => bay.IsActive && bay.CanServe(serviceType.RequiredBayType));
 
     // Checked on the local wall clock; whole ticks, so seconds and milliseconds also fail.
     private static bool IsOnGrid(DateTimeOffset start, TimeZoneInfo zone) =>
