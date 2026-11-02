@@ -48,7 +48,7 @@ elsewhere in the day. Every lost workshop hour is lost revenue.
 | # | As a Service Advisor, I want to… | So that… | Delivered by |
 |---|---|---|---|
 | US1 | Book a customer's vehicle at the time the customer asks for | I do not have to search bay and technician schedules myself | R1, R3, automatic allocation |
-| US2 | Know immediately when that time has no capacity | I can offer another time while still on the phone with the customer | R2, `409` with the reason and alternatives (ADR-0002 #3) |
+| US2 | Know immediately when that time has no capacity | I can offer another time while still on the phone with the customer | R2, `409` with the reason. Alternatives (ADR-0002 #3) are parked: not in the brief (ADR-0002, *Delivery order*) |
 | US3 | Be sure a confirmed appointment cannot clash with anyone else's | The customer does not have to wait on arrival | Exclusion constraints ([ADR-0001](adr/0001-database-enforces-no-double-booking.md)) |
 
 ### Requirements (from the brief)

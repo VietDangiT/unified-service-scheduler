@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
+using Npgsql;
+
 using ServiceScheduler.Infrastructure.Persistence;
 
 using Testcontainers.PostgreSql;
@@ -39,6 +41,16 @@ public sealed class SchedulingApiFixture : WebApplicationFactory<Program>, IAsyn
     {
         await DisposeAsync();
         await _database.DisposeAsync();
+    }
+
+    // The tests in a class share this database, so each one starts with no appointments. The seed rows stay.
+    public async Task DeleteAppointmentsAsync()
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = new NpgsqlCommand("DELETE FROM appointments", connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

@@ -47,7 +47,10 @@ starts with a test that reproduces the bug.
 - Mutation check: `tools/mutation/mutate.ps1` injects known bugs into a copy of the repo; every one
   must be caught. Add a mutation when you add a rule.
 - Use `[Theory]` for boundary tables (back-to-back, touching edges).
-- Tests are independent and order-agnostic; each integration test resets data (Respawn or a fresh schema).
+- Tests are independent and order-agnostic; each integration test resets data (Respawn, a fresh schema, or deleting the
+  tables a test writes while keeping the migration seed). Reference rows a test adds are inserted idempotently with fixed IDs.
+- Mutations that only integration tests can catch are applied by hand to a copy of the repository; record each one and its
+  result in the work package.
 - Assertions use xUnit `Assert` (or Shouldly if approved). Do not use FluentAssertions v8+ (commercial licence).
 
 ## Must-have coverage

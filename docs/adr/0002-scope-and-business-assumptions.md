@@ -49,10 +49,16 @@ Core first, then the rest (decided by the developer on 2026-10-31):
    is saved, end to end. Rejections and other branches follow once that path works. The exclusion constraints
    are in the first migration, so data is protected from the start; until step 5 a request that loses a race gets a `500`.
 3. Translating constraint violations, retrying with the next candidate, and the concurrency test (step 5).
-4. Alternatives in the `409`, so the advisor can offer another time on the phone (user story US2).
-5. Docker, README and the video.
+4. Docker and the README, so the application runs for the demo.
+5. Minimal logging and the global exception handler, because the brief asks for observability.
+6. The video.
 
-**Parked until the core is done**, in this order: availability query, cancellation, idempotency, booking horizon, buffers, business-event logging, metrics and
+The developer re-checked this order against the brief on 2026-11-02. First comes proving requirement 2 through the API (busy
+technician and bay, `docs/work-packages/step-4-capacity.md`). Alternatives in the `409` and the input-validation branches
+are not in the brief, so they moved to the parked list. EC-30 is different: an offset books another time than the one
+requested, which breaks invariant 3 in `CLAUDE.md`. Whether to fix it now is pending the developer's decision (`docs/edge-cases.md`, *Deferred*).
+
+**Parked until the core is done**, in this order: input-validation branches, alternatives in the `409`, availability query, cancellation, idempotency, booking horizon, buffers, metrics and
 dashboards, React page. Their rules and routes stay in `.claude/rules/` as the target behaviour, so a review does not report them as missing;
 until built, a capacity error carries only its reason.
 
