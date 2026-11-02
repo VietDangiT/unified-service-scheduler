@@ -229,10 +229,10 @@ Covered by the class diagrams in [§5](#5-domain-model-class-diagrams).
 flowchart LR
     subgraph local["Local / review: docker compose"]
         apiC["scheduler-api<br/>[Docker container]"]
-        pgC[("postgres:16<br/>[Docker container]")]
-        aspC["aspire-dashboard<br/>[Docker container]"]
+        pgC[("postgres:16.15<br/>[Docker container]")]
+        aspC["aspire-dashboard<br/>[Docker container, planned with logging]"]
         apiC --> pgC
-        apiC --> aspC
+        apiC -.-> aspC
     end
     subgraph azure["Target production (illustrative): Azure"]
         aca["Azure Container Apps<br/>N x scheduler-api"]
@@ -480,15 +480,8 @@ classDiagram
         <<interface>>
         +FindByIdempotencyKeyAsync(key, ct) Task~Appointment?~
         +GetByIdAsync(id, ct) Task~Appointment?~
-        +TryAddAsync(appointment, ct) Task~AddOutcome~
+        +AddAsync(appointment, ct) Task~Result~Appointment~~
         +TryCancelAsync(id, now, ct) Task~CancelOutcome~
-    }
-
-    class AddOutcome {
-        <<union>>
-        Added
-        ResourceConflict(ConflictedResource)
-        DuplicateIdempotencyKey
     }
 
     class BookingOptions {
@@ -504,7 +497,7 @@ classDiagram
     }
     class AppointmentRepository {
         -SchedulingDbContext db
-        -TranslateConflict(PostgresException) AddOutcome
+        -ToCapacityError(constraintName) DomainError?
         -ExistsAsync(id, ct) Task~bool~
     }
     class SchedulingDbContext {
@@ -518,7 +511,6 @@ classDiagram
     BookAppointmentHandler --> IAppointmentRepository
     BookAppointmentHandler --> BookingOptions
     GetAvailabilityHandler --> ISchedulingReader
-    IAppointmentRepository ..> AddOutcome : returns
     SchedulingReader ..|> ISchedulingReader
     AppointmentRepository ..|> IAppointmentRepository
     SchedulingReader --> SchedulingDbContext
@@ -760,20 +752,21 @@ sequenceDiagram
             AL-->>H: NoQualifiedTechnicianAvailable or NoCompatibleBayAvailable
         else Pair found
             AL-->>H: Allocation(bay, technician)
-            H->>RP: TryAddAsync(Appointment.Book(id, ...))
+            H->>RP: AddAsync(Appointment.Book(id, ...))
+            RP->>DB: BEGIN; lock technician row, then bay row (FOR NO KEY UPDATE)
             RP->>DB: INSERT INTO appointments
             alt Insert succeeds
-                DB-->>RP: committed
-                RP-->>H: Added
+                DB-->>RP: COMMIT
+                RP-->>H: Success(appointment)
             else Exclusion violation 23P01 on technician or bay
-                DB-->>RP: constraint name identifies the resource
-                RP-->>H: ResourceConflict(resource)
+                DB-->>RP: constraint name identifies the resource; ROLLBACK
+                RP-->>H: Failure(capacity error for that resource)
                 H->>H: Exclude resource, record retry metric, try again
             else Exclusion violation 23P01 on vehicle
-                RP-->>H: ResourceConflict(vehicle), no retry
+                RP-->>H: Failure(VehicleAlreadyBooked), no retry
             else Connection lost, commit outcome unknown
                 RP->>DB: SELECT 1 WHERE id = id
-                RP-->>H: Added if the row exists, otherwise rethrow
+                RP-->>H: Success(appointment) if the row exists, otherwise rethrow
             end
         end
     end
@@ -816,10 +809,12 @@ sequenceDiagram
     API2->>DB: Read busy intervals
     Note over API1,API2: Both see technician Alice and Bay-1 as free
 
-    API1->>DB: INSERT (Alice, Bay-1, 10:00-11:00)
-    API2->>DB: INSERT (Alice, Bay-1, 10:00-11:00)
-    DB-->>API1: Committed
-    DB-->>API2: 23P01 ex_appointments_technician_overlap
+    API1->>DB: BEGIN; lock Alice, then Bay-1
+    API2->>DB: BEGIN; lock Alice (waits for API1)
+    API1->>DB: INSERT (Alice, Bay-1, 10:00-11:00); COMMIT
+    Note over API2,DB: Lock granted; API2 now sees API1's committed row
+    API2->>DB: lock Bay-1; INSERT (Alice, Bay-1, 10:00-11:00)
+    DB-->>API2: 23P01 ex_appointments_technician_overlap; ROLLBACK
 
     API2->>API2: Exclude Alice, re-run allocation
     alt Another qualified technician and bay are free
@@ -871,6 +866,7 @@ and the database constraint has the final word.
 |---|---|---|
 | Double-booking under concurrent requests | PostgreSQL exclusion constraints ([§6.2](#62-constraints-and-indexes-that-carry-business-rules)) | Correct for any number of API instances and any future code path; see [ADR-0001](adr/0001-database-enforces-no-double-booking.md) for rejected alternatives |
 | Losing a race | Translate `23P01` → exclude the conflicted resource → re-allocate (max 3) | The advisor still gets a booking when capacity exists elsewhere |
+| Many conflicting inserts at once deadlock (`40P01`) in the exclusion check | The insert's transaction first locks the technician row, then the bay row (`FOR NO KEY UPDATE`, fixed order) | Contenders queue, so each loser gets a clean `23P01` instead of a `500`; the constraint still decides (ADR-0001) |
 | Client retries after a timeout | `Idempotency-Key` + unique partial index + request hash | Exactly-once booking from the client's view |
 | Two concurrent requests with the same key | Second insert hits `23505` → load and return the first | No duplicate, no error for a legitimate retry |
 | Commit succeeded but the acknowledgement was lost | App-generated UUID v7; on an unknown outcome, check whether the row exists before retrying or failing | Without it, the retried INSERT collides with its own row and reports a false `409` (EF Core's documented commit-failure problem) |

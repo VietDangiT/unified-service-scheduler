@@ -79,7 +79,12 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | ID | Edge case | Expected outcome | Suite | Test |
 |---|---|---|---|---|
 | EC-14 | Same vehicle already booked at an overlapping time, at the same **or another** dealership | `409 VehicleAlreadyBooked` | Unit + Integration | TBD |
-| EC-17 | **N ≥ 20 concurrent requests for the last free slot** | Exactly one `201`, others `409`, one row | Integration | TBD |
+| EC-17 | **N ≥ 20 concurrent requests for the last free slot** | Exactly one `201`, others `409`, one row | Integration | `BookingRaceTests.PostAppointment_WhenTwentyRequestsRaceForTheLastSlot_ReturnsOneCreatedAndNoQualifiedTechnicianForTheRestAndStoresOneAppointment` |
+| EC-74 | Two requests read the busy intervals before either saves; the second save is rejected on the technician constraint | `409 NoQualifiedTechnicianAvailable`, not `500`; one row | Integration | `BookingRaceTests.PostAppointment_WhenRequestReadBusyIntervalsBeforeTheFirstBookingWasSaved_ReturnsNoQualifiedTechnicianAndStoresOneAppointment` |
+| EC-76 | Two conflicting inserts wait on each other and PostgreSQL aborts one with `40P01` (deadlock) instead of `23P01` | Prevented: the save locks the technician row, then the bay row, before the insert, so contenders queue and the loser gets `409` as EC-74/75; never `500`. Same vehicle on different technicians and bays can still deadlock (rule 8, deferred) | Integration | `BookingRaceTests` EC-17, run repeatedly (not deterministic) |
+| EC-75 | As EC-74, but the conflict is on the bay constraint (two technicians, one bay) | `409 NoCompatibleBayAvailable`; one row | Integration | `BayRaceTests.PostAppointment_WhenRequestReadBusyIntervalsBeforeTheBayWasTaken_ReturnsNoCompatibleBayAndStoresOneAppointment` |
+| EC-77 | 20 saves at the same time with different technicians and the same bay | One saved; 19 `NoCompatibleBayAvailable`; no exception (the bay lock prevents the `40P01`) | Integration | `LockOrderRaceTests.AddAsync_WhenTwentySavesOnDifferentTechniciansRaceForTheSameBay_ReturnsOneSavedAndNoCompatibleBayForTheRestAndStoresOneAppointment` |
+| EC-78 | 20 saves at the same time with the same technician and different bays | One saved; 19 `NoQualifiedTechnicianAvailable`; no exception (the technician lock prevents the `40P01`) | Integration | `LockOrderRaceTests.AddAsync_WhenTwentySavesOnDifferentBaysRaceForTheSameTechnician_ReturnsOneSavedAndNoQualifiedTechnicianForTheRestAndStoresOneAppointment` |
 | EC-18 | Constraint violation on first candidate, second candidate free | Booking succeeds on retry | Integration | TBD |
 | EC-21 | Service type duration changed after booking | Existing appointment end time unchanged | Integration | TBD |
 | EC-44 | Allocation attempts exhausted (3 conflicts in a row) | Capacity error for the resource that conflicted last | Unit | TBD |
@@ -131,13 +136,16 @@ Findings from code reviews that were consciously postponed, with where they will
 | The whole-date busy window is correct but untested: reading only the requested slot makes a technician's other jobs that day count as no workload (ADR-0002 #20), and every test still passes (shown by `code-reviewer` on 2026-11-02). The `Confirmed` filter is also untested, because no test has a cancelled appointment | Whole date: "two technicians" branch. `Confirmed`: with cancellation |
 | A non-zero `buffer_minutes` is ignored by `Appointment.Book`, and `blocked_until` is stored permanently; no seeded row triggers it | With buffers |
 | Busy-interval query has no lower bound on `start_at`, so it examines the dealership's whole history | With availability |
-| Who applies migrations outside tests, and the `ConnectionStrings:Scheduling` value | Docker step |
+| The startup migration (`Database:ApplyMigrationsOnStartup`, on in `docker-compose.yml`) has no test: the integration fixture migrates the database itself, so deleting the startup call passes every test. Fix: the fixture sets the flag instead of migrating (changes approved tests) | After the core |
+| `/health/live` and `/health/ready` (`api-conventions.md`) are not built, and the compose `api` service has no healthcheck | With logging |
 | CA1861 fails the build on generated migrations; the first one was hand-edited. Decide on exempting `**/Migrations/*.cs` | Next migration |
 | §6.1 says VINs are 17 characters, but no `CHECK` enforces it | After the core |
 | Logging (booked, rejected) and the global `IExceptionHandler` are not built yet, while `docs/system-design.md` §11 describes them | After Docker and the README, before the video (developer, 2026-11-02). Scenarios: `docs/work-packages/step-4-logging.md` |
-| "Now" is read from the server clock, so it must be set to the dealership's time (`TZ` in Docker) | Docker step |
 | `Skill` does not validate input (`"ev"` vs `"EV"`); zero duration is now blocked by a `CHECK` | After the core |
-| `Allocate` has no way to exclude a resource that lost a race; define its shape and align `docs/system-design.md` §7 | Step 5 |
+| Two requests for the same vehicle on different technicians and bays can still deadlock (`40P01`, a `500`); the vehicle has no lock and its `23P01` is not translated | With rule 8 |
+| Retry after a lost race (EC-18, EC-44) is not built. It needs no change to `Allocate`: the conflicting booking is committed when PostgreSQL reports `23P01`, so re-reading the busy intervals already excludes it. Align `docs/system-design.md` §7 when built | Next package |
+| When both the technician and the bay conflict, PostgreSQL reports the constraint it checks first (the technician one today, by creation order), so EC-17 and EC-74 rely on that order for ADR-0002 #17. The retry makes it independent of the order | With the retry |
+| EF Core logs each rejected insert at `Error` (`Failed executing DbCommand`), although a lost race is an expected `409` (`Information`) | Logging package |
 | Workload tests: a technician with two jobs in a day (sum vs largest) | After the core |
 | Bay compatibility is left to the swappable policy; filter `CanServe` in the allocator so a new policy cannot break it | After the core |
 | `Dealership` equality by `Id` is unused and untested, and `==` is still reference equality | After the core |

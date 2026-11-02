@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Npgsql;
 
+using ServiceScheduler.Application.Appointments;
 using ServiceScheduler.Infrastructure.Persistence;
 
 using Testcontainers.PostgreSql;
@@ -52,6 +53,47 @@ public sealed class SchedulingApiFixture : WebApplicationFactory<Program>, IAsyn
         await using var command = new NpgsqlCommand("DELETE FROM appointments", connection);
         await command.ExecuteNonQueryAsync();
     }
+
+    // Reads the database directly, not through the DbContext, so the check does not share the code under test.
+    public async Task<long> CountAppointmentsAsync()
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = new NpgsqlCommand("SELECT count(*) FROM appointments", connection);
+
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    // A vehicle of the seeded customer. Idempotent, because the database outlives each test and only appointments are reset.
+    public async Task AddVehicleAsync(Guid vehicleId, string vin)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO vehicles (id, customer_id, vin, make, model, model_year)
+            VALUES (@id, @customerId, @vin, 'Toyota', 'Corolla', 2022)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", vehicleId);
+        command.Parameters.AddWithValue("customerId", SeedData.CustomerId);
+        command.Parameters.AddWithValue("vin", vin);
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    // The same API and database, but every request reads the busy intervals as empty, as if it read them before a
+    // competing booking was saved. The caller disposes the returned factory.
+    public WebApplicationFactory<Program> WithStaleBusyIntervals() =>
+        WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<ISchedulingReader>();
+            services.AddScoped<SchedulingReader>();
+            services.AddScoped<ISchedulingReader, StaleSchedulingReader>();
+        }));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

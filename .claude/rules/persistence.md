@@ -46,8 +46,14 @@ paths:
   `technicians (id, dealership_id)`), not only by application code.
 - Reference ranges carry `CHECK (closes_at > opens_at AND closes_at < '24:00')`; PostgreSQL `time` accepts `24:00`, .NET `TimeOnly` does not.
 - Translate `PostgresException` with `SqlState == PostgresErrorCodes.ExclusionViolation` (`23P01`) to a
-  domain error in Infrastructure; constraint name tells which resource conflicted. Never let a raw
-  provider exception cross into Application.
+  domain error in Infrastructure; constraint name tells which resource conflicted. Conflicting inserts can
+  also deadlock in the exclusion check (`40P01`). The insert therefore runs in one short transaction that first locks
+  the technician row, then the bay row (`FOR NO KEY UPDATE`, always in that order), so contenders queue and the loser
+  gets a clean `23P01`. Saving again after a `40P01` does not help: the retry joins the same wait cycle.
+  Every transaction that inserts a confirmed appointment or changes one's time, technician or bay, and any other
+  transaction that locks technician or bay rows, takes them
+  in the same order (technician, then bay); one that skips or reverses it brings the deadlock back.
+  Never let a raw provider exception cross into Application.
 - State transitions: prefer one atomic conditional update (`ExecuteUpdateAsync` with the expected state
   in `WHERE`, check rows affected). Use PostgreSQL `xmin` as a row version only when an aggregate is
   loaded, changed in memory and saved.
@@ -62,6 +68,9 @@ paths:
 - Never edit a migration that has been applied/committed; add a new one.
 - Raw SQL in migrations (extensions, constraints) goes through `migrationBuilder.Sql` with a matching `Down`.
 - Seed data for the demo is deterministic and idempotent.
+- The API applies migrations on startup only when `Database:ApplyMigrationsOnStartup` is true (default false; true in
+  `docker-compose.yml` for the demo). In production, migrations are a release step. EF Core's migration lock queues
+  concurrent runs.
 
 ## Safety
 

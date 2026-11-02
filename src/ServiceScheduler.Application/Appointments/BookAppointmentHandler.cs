@@ -50,9 +50,13 @@ public sealed class BookAppointmentHandler(
         }
 
         var appointment = Appointment.Book(new AppointmentId(Guid.CreateVersion7()), request, allocation.Value, now);
-        await repository.AddAsync(appointment, cancellationToken);
+        Result<Appointment> saved = await repository.AddAsync(appointment, cancellationToken);
+        if (!saved.IsSuccess)
+        {
+            return Result.Failure<AppointmentDto>(saved.Error);
+        }
 
-        return Result.Success(ToDto(appointment, context));
+        return Result.Success(ToDto(saved.Value, context));
     }
 
     private static AppointmentDto ToDto(Appointment appointment, BookingContext context)

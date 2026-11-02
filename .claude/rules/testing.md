@@ -61,6 +61,14 @@ The concurrency test is mandatory:
 > N parallel requests (N ≥ 20) for the last free slot, released together with a `Barrier`/
 > `TaskCompletionSource` gate → exactly **one** `201`, the rest `409`, and exactly one row in the database.
 
+A race test passing once proves little: before approval and after any change to the save path, run it repeatedly
+(at least 15 times in a loop) and report the counts.
+
+A mutation that only shows under a race (for example removing a lock) needs a test that forces the contended path (a
+stale reader, or saves held on a lock and released together). Prefer a check that catches it every run, such as asserting
+that a save waits on a held row instead of finishing. Where only the race outcome can show it, it counts as killed when it
+fails in at least 1 of 10 runs. Either way the work package records the observed rate.
+
 ## Quality bar
 
 - Tests must be deterministic. A flaky test is a bug; fix or quarantine it with an issue, never retry it into green.
