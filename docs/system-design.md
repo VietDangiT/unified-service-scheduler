@@ -727,7 +727,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Advisor->>EP: POST /api/appointments (Idempotency-Key header)
-    EP->>EP: Shape validation (required fields, no offset, key length)
+    EP->>EP: Shape validation (required fields, key length)
     EP->>H: HandleAsync(command, ct)
 
     opt Idempotency-Key present
@@ -943,7 +943,7 @@ Content-Type: application/json
 
 | Error | HTTP | Meaning for the advisor |
 |---|---|---|
-| Shape errors (missing field, an offset on `requestedStart`, bad `Idempotency-Key`) | 400 | Fix the request |
+| Shape errors (missing field, bad `Idempotency-Key`) | 400 | Fix the request |
 | `NotFound` | 404 | Wrong ID |
 | `VehicleNotOwnedByCustomer`, `ServiceNotOfferedAtDealership`, `StartInPast`, `BeyondBookingHorizon`, `StartNotOnGrid`, `OutsideOpeningHours`, `IdempotencyKeyReused` | 422 | This request can never succeed as sent |
 | `NoQualifiedTechnicianAvailable`, `NoCompatibleBayAvailable`, `VehicleAlreadyBooked`, `AppointmentAlreadyStarted` | 409 | Conflicts with the current state; pick another time |

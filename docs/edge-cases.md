@@ -54,7 +54,7 @@ Every row must map to at least one test. Keep the **Test** column current (`/tdd
 | EC-10 | Requested start not on the 15-minute grid (10:10) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartIsBetweenQuarterHours_…` |
 | EC-19 | Unknown customer / vehicle / service type / dealership | `404` | Integration | TBD |
 | EC-20 | Vehicle does not belong to the customer | `422 VehicleNotOwnedByCustomer` | Unit | `BookingValidatorTests.Validate_WhenVehicleBelongsToAnotherCustomer_ReturnsVehicleNotOwnedByCustomer` |
-| EC-30 | `requestedStart` with an offset (`2026-11-03T10:00:00+07:00`) | `400`: one clock, so an offset is never accepted (ADR-0002 #25) | Integration | TBD |
+| EC-30 | `requestedStart` with an offset (`2026-11-03T10:00:00+07:00`) | Out of scope: the client always sends a plain time (ADR-0002 #25). Not checked; today the server converts it to its own clock | — | None, by decision |
 | EC-31 | `requestedStart` with seconds or milliseconds (`10:00:30`) | `422 StartNotOnGrid` | Unit | `BookingValidatorTests.Validate_WhenStartHasSecondsOrMilliseconds_ReturnsStartNotOnGrid` |
 | EC-32 | `requestedStart` beyond the 90-day horizon | `422 BeyondBookingHorizon` | Unit | TBD |
 | EC-33 | Dealership closed that weekday (no opening-hours row) | `422 OutsideOpeningHours` | Unit | `BookingValidatorTests.Validate_WhenDealershipIsClosedThatWeekday_ReturnsOutsideOpeningHours` |
@@ -126,7 +126,7 @@ Findings from code reviews that were consciously postponed, with where they will
 | Gap | Planned in |
 |---|---|
 | **Tests removed by the developer on 2026-10-31** to focus on the end-to-end flow (error order, technical foundation; restore from commit `05172c2`). No test or mutation now protects: a resource of another dealership (EC-64; the allocator relies on this check), a job past midnight (EC-03), error order when several rules fail (EC-34, and the order part of EC-22), zero-length slots, empty opening ranges (EC-57), null results | After the end-to-end flow; EC-64 is backed by the foreign key (EC-46) in step 4 |
-| **EC-30 is a live gap:** an offset on `requestedStart` is converted to the server's clock (`12:00+03:00` booked 16:00 with `201` on a UTC+7 host, and returned an offset), and `Z` gives `500`. A missing ID binds to an empty `Guid`; a missing `requestedStart` binds to the default date | Not fixed. A known breach of invariant 3 (one clock): the stored time differs from the requested one. Whether to fix the offset part now or accept it is the developer's decision, pending since 2026-11-02 |
+| A missing ID binds to an empty `Guid`; a missing `requestedStart` binds to the default date | Parked with input validation: not in the brief (developer, 2026-11-02) |
 | Rule 4 has no test for a start on an earlier date (EC-09): a past check applied only to today would pass every test | Past-start branch |
 | The whole-date busy window is correct but untested: reading only the requested slot makes a technician's other jobs that day count as no workload (ADR-0002 #20), and every test still passes (shown by `code-reviewer` on 2026-11-02). The `Confirmed` filter is also untested, because no test has a cancelled appointment | Whole date: "two technicians" branch. `Confirmed`: with cancellation |
 | A non-zero `buffer_minutes` is ignored by `Appointment.Book`, and `blocked_until` is stored permanently; no seeded row triggers it | With buffers |

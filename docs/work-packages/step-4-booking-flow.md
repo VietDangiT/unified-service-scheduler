@@ -79,8 +79,7 @@ The branches, one at a time, each shown to the developer first: invalid request,
 same vehicle twice, back-to-back, EV with no EV resource, concurrent requests. Invalid request comes first because review
 confirmed EC-30 books the wrong time today.
 
-"Invalid request" must include EC-30 (an offset on `requestedStart` is a `400`, ADR-0002 #25): the plain `DateTime` contract
-accepts `+03:00` and converts it, booking the wrong time with a `201`. Past start must include a date earlier than today
+EC-30 (an offset on `requestedStart`) is out of scope since 2026-11-02: the client always sends a plain time (ADR-0002 #25). Past start must include a date earlier than today
 (EC-09), which no test covers since the time-zone tests were removed.
 
 The first follow-up package must also settle two things. EC-72 asserts one row in the whole table and shares its database

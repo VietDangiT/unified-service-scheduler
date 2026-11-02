@@ -13,11 +13,10 @@ Status of each assumption is tracked in `docs/adr/`. Every rule maps to a row in
 ## Booking request
 
 Input: `customerId`, `vehicleId`, `serviceTypeId`, `dealershipId`, `requestedStart` (ISO-8601 date and
-time, **no** offset), optional `Idempotency-Key` header. The caller is a service advisor using an internal tool
-(no end-customer auth in scope).
+time, **no** offset: the client always sends a plain time, and an offset is out of scope and not checked, ADR-0002 #25),
+optional `Idempotency-Key` header. The caller is a service advisor using an internal tool (no end-customer auth in scope).
 
-Shape errors are `400` (API layer): missing fields, malformed IDs, `requestedStart` with an offset,
-`Idempotency-Key` empty or longer than 64 characters.
+Shape errors are `400` (API layer): missing fields, malformed IDs, `Idempotency-Key` empty or longer than 64 characters.
 
 ## Validation (reject with a domain error, never an exception)
 

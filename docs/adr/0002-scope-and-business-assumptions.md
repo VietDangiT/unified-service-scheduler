@@ -38,7 +38,7 @@ The brief is deliberately ambiguous. These assumptions turn it into a buildable,
 | 22 | Managing resources (bays, technicians, opening hours) and technician job views | Out of scope: seeded data is used instead | The brief is about booking against existing capacity; admin screens add no booking behaviour |
 | 23 | Are customers, vehicles and service types per dealership or shared? | Shared across dealerships | One customer record wherever they bring the car, and a vehicle cannot be booked at two dealerships at once (rule 8). The cost: a service type has the same duration everywhere |
 | 24 | Must the database guarantee the vehicle belongs to the appointment's customer? | No: rule 2 checks it in code when booking | The appointment records who booked at that time. A composite foreign key would block changing a vehicle's owner once it has appointments |
-| 25 | Time zones and UTC (decided by the developer on 2026-10-31) | Not used. One clock: `10:00` means 10:00 in the request, the response and the database (`timestamp`, `tsrange`). A request with an offset is rejected with `400` | The brief never mentions time zones; they were an earlier AI-session assumption and solve no booking problem. The cost: every dealership is treated as being on the same clock, and "now" relies on the server clock being set correctly |
+| 25 | Time zones and UTC (decided by the developer on 2026-10-31) | Not used. One clock: `10:00` means 10:00 in the request, the response and the database (`timestamp`, `tsrange`). The client always sends a plain date and time; a time with an offset is out of scope and not checked (decided by the developer on 2026-11-02) | The brief never mentions time zones; they were an earlier AI-session assumption and solve no booking problem. The cost: every dealership is treated as being on the same clock, and "now" relies on the server clock being set correctly |
 
 ## Delivery order
 
@@ -55,8 +55,8 @@ Core first, then the rest (decided by the developer on 2026-10-31):
 
 The developer re-checked this order against the brief on 2026-11-02. First comes proving requirement 2 through the API (busy
 technician and bay, `docs/work-packages/step-4-capacity.md`). Alternatives in the `409` and the input-validation branches
-are not in the brief, so they moved to the parked list. EC-30 is different: an offset books another time than the one
-requested, which breaks invariant 3 in `CLAUDE.md`. Whether to fix it now is pending the developer's decision (`docs/edge-cases.md`, *Deferred*).
+are not in the brief, so they moved to the parked list. A time with an offset (EC-30) is out of scope: the client always sends
+a plain time (#25).
 
 **Parked until the core is done**, in this order: input-validation branches, alternatives in the `409`, availability query, cancellation, idempotency, booking horizon, buffers, metrics and
 dashboards, React page. Their rules and routes stay in `.claude/rules/` as the target behaviour, so a review does not report them as missing;
