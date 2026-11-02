@@ -17,7 +17,7 @@ dotnet build ServiceScheduler.slnx                       # warnings are errors
 dotnet test  tests/ServiceScheduler.UnitTests            # fast, no Docker required
 dotnet test  ServiceScheduler.slnx                       # full suite; integration tests need Docker
 dotnet format ServiceScheduler.slnx --verify-no-changes  # style gate
-docker compose up --build                                # API + PostgreSQL + Aspire dashboard
+docker compose up --build                                # API (http://localhost:8080) + PostgreSQL; migrations and seed applied on startup
 ```
 
 ## Architecture (Clean Architecture, DDD)
