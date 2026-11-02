@@ -1,0 +1,54 @@
+# Requests against the one-command demo (docker compose up --build).
+# The IDs are the demo seed (SeedData / the InitialSchema migration): dealership Riverside, one Standard bay,
+# technician Alice, the oil change (60 minutes), and the sample customer's Honda Civic.
+# Times are plain local times on one clock, with no offset (ADR-0002 #25).
+#
+# @start must be a future Tuesday (the only day the seeded dealership and technician work, 08:00-17:00)
+# within the 90-day booking horizon. 2026-11-10 is a Tuesday.
+# The database volume keeps bookings between runs; docker compose down -v resets the demo data.
+
+@baseUrl = http://localhost:8080
+@start = 2026-11-10T09:00:00
+@customerId = c0570000-0000-0000-0000-000000000001
+@vehicleId = ca700000-0000-0000-0000-000000000001
+@serviceTypeId = 5e7c0000-0000-0000-0000-000000000001
+@dealershipId = dea10000-0000-0000-0000-000000000001
+@unknownDealershipId = dea10000-0000-0000-0000-0000000000ff
+
+### 1. Book an oil change at @start -> 201 Created
+POST {{baseUrl}}/api/appointments
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}",
+  "vehicleId": "{{vehicleId}}",
+  "serviceTypeId": "{{serviceTypeId}}",
+  "dealershipId": "{{dealershipId}}",
+  "requestedStart": "{{start}}"
+}
+
+### 2. The same request again -> 409 Conflict
+# Today the code is NoQualifiedTechnicianAvailable, because Alice and the only bay are taken.
+# It books the same vehicle again, so once rule 8 is built the code becomes VehicleAlreadyBooked.
+POST {{baseUrl}}/api/appointments
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}",
+  "vehicleId": "{{vehicleId}}",
+  "serviceTypeId": "{{serviceTypeId}}",
+  "dealershipId": "{{dealershipId}}",
+  "requestedStart": "{{start}}"
+}
+
+### 3. A dealership that does not exist -> 404 Not Found
+POST {{baseUrl}}/api/appointments
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}",
+  "vehicleId": "{{vehicleId}}",
+  "serviceTypeId": "{{serviceTypeId}}",
+  "dealershipId": "{{unknownDealershipId}}",
+  "requestedStart": "{{start}}"
+}

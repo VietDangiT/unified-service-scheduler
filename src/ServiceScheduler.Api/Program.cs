@@ -26,4 +26,10 @@ WebApplication app = builder.Build();
 
 app.MapGroup("/api").MapAppointmentEndpoints();
 
-app.Run();
+if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{
+    // The host is not started yet, so no stopping token exists; a killed migration rolls back (PostgreSQL DDL is transactional).
+    await app.Services.MigrateSchedulingDatabaseAsync(CancellationToken.None);
+}
+
+await app.RunAsync();

@@ -1,0 +1,40 @@
+# One command for the demo: docker compose up --build
+# The API applies the migrations (schema and demo seed) on startup, then listens on http://localhost:8080.
+
+services:
+  postgres:
+    image: postgres:16.15
+    environment:
+      POSTGRES_DB: scheduling
+      POSTGRES_USER: scheduler
+      # Local demo value. Set POSTGRES_PASSWORD (shell or .env) to change it for both services;
+      # PostgreSQL only reads it when the volume is created, so run docker compose down -v first.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scheduler-demo}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # -h forces TCP, so the check stays red while the image's init script runs its socket-only server.
+      test: ["CMD-SHELL", "pg_isready -h localhost -U scheduler -d scheduling"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: src/ServiceScheduler.Api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # Loopback only: the demo is not reachable from other machines.
+      - "127.0.0.1:8080:8080"
+    environment:
+      # No Kerberos here: without the GSS setting the driver probes for a library the runtime image lacks.
+      ConnectionStrings__Scheduling: "Host=postgres;Port=5432;Database=scheduling;Username=scheduler;Password=${POSTGRES_PASSWORD:-scheduler-demo};GSS Encryption Mode=Disable"
+      Database__ApplyMigrationsOnStartup: "true"
+      # "Now" is this clock (ADR-0002 #25). Override with TZ=<IANA zone> docker compose up.
+      TZ: ${TZ:-UTC}
+
+volumes:
+  postgres-data:
