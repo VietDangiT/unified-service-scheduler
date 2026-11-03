@@ -24,5 +24,6 @@ internal sealed class CustomerConfiguration : IEntityTypeConfiguration<CustomerR
             Email = "customer@example.com",
             Phone = "+00 000 000 000",
         });
+        builder.HasData(NorthgateDemoData.Customers);
     }
 }

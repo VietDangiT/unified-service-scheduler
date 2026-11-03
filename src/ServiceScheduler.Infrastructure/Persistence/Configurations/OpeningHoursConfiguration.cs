@@ -30,5 +30,6 @@ internal sealed class OpeningHoursConfiguration : IEntityTypeConfiguration<Openi
             OpensAt = new TimeOnly(8, 0),
             ClosesAt = new TimeOnly(17, 0),
         });
+        builder.HasData(NorthgateDemoData.OpeningHours);
     }
 }

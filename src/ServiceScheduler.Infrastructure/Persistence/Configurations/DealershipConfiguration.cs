@@ -16,5 +16,6 @@ internal sealed class DealershipConfiguration : IEntityTypeConfiguration<Dealers
         builder.Property(dealership => dealership.Name).HasColumnName("name");
 
         builder.HasData(new DealershipRow { Id = SeedData.DealershipId, Name = "Riverside" });
+        builder.HasData(NorthgateDemoData.Dealership);
     }
 }
