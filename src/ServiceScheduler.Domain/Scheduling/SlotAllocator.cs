@@ -1,5 +1,6 @@
 using ServiceScheduler.Domain.Common;
 using ServiceScheduler.Domain.Dealerships;
+using ServiceScheduler.Domain.ServiceTypes;
 
 namespace ServiceScheduler.Domain.Scheduling;
 
@@ -71,3 +72,9 @@ public sealed class SlotAllocator
                 jobs => jobs.Aggregate(TimeSpan.Zero, (total, job) => total + job.Blocked.Duration));
     }
 }
+
+/// <summary>The technician and bay chosen for a service interval.</summary>
+public sealed record Allocation(ServiceBayId BayId, TechnicianId TechnicianId, TimeSlot Slot);
+
+/// <param name="Slot">The validated service interval.</param>
+public sealed record AllocationRequest(Dealership Dealership, ServiceType ServiceType, TimeSlot Slot, BusyIntervals Busy);

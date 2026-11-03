@@ -60,3 +60,5 @@ public sealed class Appointment
         return new Appointment(id, request, allocation, now);
     }
 }
+
+public readonly record struct AppointmentId(Guid Value);

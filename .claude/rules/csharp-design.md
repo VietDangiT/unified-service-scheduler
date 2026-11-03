@@ -41,7 +41,9 @@ than a little duplication. Test code may repeat setup for readability; use build
 - Nullable reference types are on and warnings are errors. No `!` null-forgiving operator except
   in tests or with a comment explaining why it is safe.
 - Guard clauses at the top of methods; return early; keep nesting to two levels.
-- Strongly typed IDs (`readonly record struct AppointmentId(Guid Value)`).
+- Strongly typed IDs (`readonly record struct AppointmentId(Guid Value)`). One-line types (IDs, small records) live
+  in the file of the aggregate or service they belong to, not one file each (for example `Dealerships/DealershipIds.cs`,
+  `Allocation` in `SlotAllocator.cs`).
 - Name things by intent: `IsAvailableFor(slot)` not `Check()`. No abbreviations, no Hungarian notation.
 - No magic numbers or strings. Business constants live in the domain or in options.
 - Methods short enough to read without scrolling. Extract when a comment would otherwise explain a block.
