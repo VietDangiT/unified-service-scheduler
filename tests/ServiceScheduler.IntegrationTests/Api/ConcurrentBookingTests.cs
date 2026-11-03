@@ -6,9 +6,9 @@ using ServiceScheduler.IntegrationTests.Fixtures;
 namespace ServiceScheduler.IntegrationTests.Api;
 
 // Twenty advisors book Tuesday 10:00 at the same instant, each for a vehicle of its own, so the technicians and bays are
-// the only shared resources. The requests wait at one gate and are released together. Until the retry after a lost race
-// (EC-18) is built, a loser may be refused while a pair is still free (ADR-0002 #27), so these tests assert "never more
-// bookings than capacity, never a resource twice, never a 500".
+// the only shared resources. The requests wait at one gate and are released together. A loser that meets a constraint
+// excludes that technician or bay and tries again (EC-18, Allocation policy 3), so every free pair is booked and a
+// loser is refused only when none is left; never a resource twice, never a 500.
 public sealed class ConcurrentBookingTests(SchedulingApiFixture fixture) : IClassFixture<SchedulingApiFixture>, IAsyncLifetime
 {
     private const int RacingRequests = 20;
@@ -45,10 +45,10 @@ public sealed class ConcurrentBookingTests(SchedulingApiFixture fixture) : IClas
         Assert.Equal(1, await fixture.CountAppointmentsAsync());
     }
 
-    // Scenario 25, EC-85: three technicians and three bays. Never more bookings than capacity and never a technician or
-    // a bay twice; "exactly 3" is not asserted until the retry exists (ADR-0002 #27).
+    // Scenario 25, EC-85: three technicians and three bays. The retry books every pair, so exactly three succeed, each
+    // on its own technician and bay, and the other seventeen are capacity conflicts.
     [Fact]
-    public async Task PostAppointment_WhenTwentyRequestsRaceForThreeTechniciansAndThreeBays_ReturnsAtMostThreeCreatedOnDistinctTechniciansAndBaysAndConflictForTheRest()
+    public async Task PostAppointment_WhenTwentyRequestsRaceForThreeTechniciansAndThreeBays_ReturnsThreeCreatedOnDistinctTechniciansAndBaysAndConflictForTheRest()
     {
         const int capacity = 3;
         SchedulingData data = await new SchedulingDataBuilder()
@@ -62,15 +62,16 @@ public sealed class ConcurrentBookingTests(SchedulingApiFixture fixture) : IClas
 
         Assert.DoesNotContain(outcomes, outcome => outcome.Status == HttpStatusCode.InternalServerError);
         RaceOutcome[] created = [.. outcomes.Where(outcome => outcome.Status == HttpStatusCode.Created)];
-        Assert.InRange(created.Length, 1, capacity);
+        Assert.Equal(capacity, created.Length);
         Assert.Distinct(created.Select(outcome => outcome.TechnicianId));
         Assert.Distinct(created.Select(outcome => outcome.ServiceBayId));
+        Assert.Equal(RacingRequests - capacity, outcomes.Count(outcome => outcome.Status == HttpStatusCode.Conflict));
         AssertEveryOtherIsACapacityConflict(outcomes);
-        Assert.Equal(created.Length, await fixture.CountAppointmentsAsync());
+        Assert.Equal(capacity, await fixture.CountAppointmentsAsync());
     }
 
-    // Scenario 26, EC-89: two technicians but one bay, so a race can be lost on the bay alone. Which error a loser gets
-    // depends on what it read and which constraint it met (ADR-0002 #27).
+    // Scenario 26, EC-89: two technicians but one bay. A loser that meets the technician constraint excludes that
+    // technician and tries the other one, which is free, so what is missing in the end is the bay.
     [Fact]
     public async Task PostAppointment_WhenTwentyRequestsRaceForTwoTechniciansAndTheOnlyBay_ReturnsOneCreatedAndConflictForTheRestAndStoresOneAppointment()
     {
@@ -85,7 +86,14 @@ public sealed class ConcurrentBookingTests(SchedulingApiFixture fixture) : IClas
 
         Assert.DoesNotContain(outcomes, outcome => outcome.Status == HttpStatusCode.InternalServerError);
         Assert.Single(outcomes, outcome => outcome.Status == HttpStatusCode.Created);
-        AssertEveryOtherIsACapacityConflict(outcomes);
+        Assert.All(
+            outcomes.Where(outcome => outcome.Status != HttpStatusCode.Created),
+            outcome =>
+            {
+                Assert.Equal(HttpStatusCode.Conflict, outcome.Status);
+                Assert.Equal(AppointmentsApi.ProblemMediaType, outcome.MediaType);
+                Assert.Equal("NoCompatibleBayAvailable", outcome.Code);
+            });
         Assert.Equal(1, await fixture.CountAppointmentsAsync());
     }
 

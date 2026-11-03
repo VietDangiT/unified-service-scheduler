@@ -473,7 +473,7 @@ classDiagram
     class ISchedulingReader {
         <<interface>>
         +GetBookingContextAsync(command, ct) Task~BookingContext?~
-        +GetBusyIntervalsAsync(dealershipId, vehicleId, window, ct) Task~BusyIntervals~
+        +GetBusyIntervalsAsync(dealershipId, window, ct) Task~BusyIntervals~
     }
 
     class IAppointmentRepository {
@@ -741,12 +741,12 @@ sequenceDiagram
         EP-->>Advisor: 404 ProblemDetails (stop)
     end
     H->>H: Validate in order: vehicle owner, service offered, past, horizon (parked), grid, opening hours
-    H->>RD: GetBusyIntervalsAsync(dealership, vehicle, window)
-    RD->>DB: Busy intervals of candidates (this dealership) and of the vehicle (all dealerships)
     H->>H: Vehicle free for the service interval? Otherwise VehicleAlreadyBooked
     H->>H: id = Guid.CreateVersion7()
 
     loop Up to MaxAllocationAttempts (3)
+        H->>RD: GetBusyIntervalsAsync(dealership, whole date), read again on every attempt
+        RD->>DB: Busy intervals of this dealership's technicians and bays
         H->>AL: Allocate(slot, candidates, busy, excluded)
         alt No eligible pair
             AL-->>H: NoQualifiedTechnicianAvailable or NoCompatibleBayAvailable
@@ -761,7 +761,7 @@ sequenceDiagram
             else Exclusion violation 23P01 on technician or bay
                 DB-->>RP: constraint name identifies the resource, then ROLLBACK
                 RP-->>H: Failure(capacity error for that resource)
-                H->>H: Exclude resource, record retry metric, try again
+                H->>H: Exclude that technician or bay, try again (retry metric: planned)
             else Exclusion violation 23P01 on vehicle
                 RP-->>H: Failure(VehicleAlreadyBooked), no retry
             else Connection lost, commit outcome unknown
@@ -816,7 +816,7 @@ sequenceDiagram
     API2->>DB: lock Bay-1, then INSERT (Alice, Bay-1, 10:00-11:00)
     DB-->>API2: 23P01 ex_appointments_technician_overlap, then ROLLBACK
 
-    API2->>API2: Exclude Alice, re-run allocation
+    API2->>API2: Exclude Alice, read busy intervals again, re-run allocation
     alt Another qualified technician and bay are free
         API2->>DB: INSERT (Bob, Bay-2, 10:00-11:00)
         DB-->>API2: Committed

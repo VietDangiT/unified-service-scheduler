@@ -36,28 +36,53 @@ public sealed class BookAppointmentHandler(
             return Result.Failure<AppointmentDto>(slot.Error);
         }
 
+        // Generated once, so every attempt saves the same appointment (booking-domain.md, Idempotency).
+        var appointmentId = new AppointmentId(Guid.CreateVersion7());
+        var allocationRequest = new AllocationRequest(context.Dealership, context.ServiceType, slot.Value, BusyIntervals.None);
+
         // The whole date, not just the slot: workload counts every job on that date (ADR-0002 #20).
-        BusyIntervals busy = await reader.GetBusyIntervalsAsync(
-            context.Dealership.Id,
-            TimeSlot.Create(slot.Value.Start.Date, WholeDate),
-            cancellationToken);
+        var busyWindow = TimeSlot.Create(slot.Value.Start.Date, WholeDate);
 
-        Result<Allocation> allocation = allocator.Allocate(
-            new AllocationRequest(context.Dealership, context.ServiceType, slot.Value, busy));
-        if (!allocation.IsSuccess)
+        for (int attempt = 1; ; attempt++)
         {
-            return Result.Failure<AppointmentDto>(allocation.Error);
-        }
+            allocationRequest = allocationRequest with
+            {
+                Busy = await reader.GetBusyIntervalsAsync(context.Dealership.Id, busyWindow, cancellationToken),
+            };
 
-        var appointment = Appointment.Book(new AppointmentId(Guid.CreateVersion7()), request, allocation.Value, now);
-        Result<Appointment> saved = await repository.AddAsync(appointment, cancellationToken);
-        if (!saved.IsSuccess)
-        {
-            return Result.Failure<AppointmentDto>(saved.Error);
-        }
+            Result<Allocation> allocation = allocator.Allocate(allocationRequest);
+            if (!allocation.IsSuccess)
+            {
+                return Result.Failure<AppointmentDto>(allocation.Error);
+            }
 
-        return Result.Success(ToDto(saved.Value, context));
+            var appointment = Appointment.Book(appointmentId, request, allocation.Value, now);
+            Result<Appointment> saved = await repository.AddAsync(appointment, cancellationToken);
+            if (saved.IsSuccess)
+            {
+                return Result.Success(ToDto(saved.Value, context));
+            }
+
+            // A vehicle conflict is final, since another technician or bay cannot free the vehicle (Allocation policy 4).
+            // Once the attempts run out, the last conflict is the answer (policy 3).
+            if (!IsLostRace(saved.Error) || attempt == SlotAllocator.MaxAllocationAttempts)
+            {
+                return Result.Failure<AppointmentDto>(saved.Error);
+            }
+
+            allocationRequest = ExcludeLostResource(allocationRequest, allocation.Value, saved.Error);
+        }
     }
+
+    // A concurrent booking took the technician or the bay after the busy intervals were read (Allocation policy 3).
+    private static bool IsLostRace(DomainError error) =>
+        error == BookingErrors.NoQualifiedTechnicianAvailable || error == BookingErrors.NoCompatibleBayAvailable;
+
+    // The busy intervals read next may still miss the winner, so the lost resource is excluded explicitly.
+    private static AllocationRequest ExcludeLostResource(AllocationRequest request, Allocation lost, DomainError conflict) =>
+        conflict == BookingErrors.NoQualifiedTechnicianAvailable
+            ? request with { ExcludedTechnicians = request.ExcludedTechnicians.Add(lost.TechnicianId) }
+            : request with { ExcludedBays = request.ExcludedBays.Add(lost.BayId) };
 
     private static AppointmentDto ToDto(Appointment appointment, BookingContext context)
     {

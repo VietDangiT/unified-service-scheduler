@@ -66,8 +66,8 @@ The concurrency test is mandatory:
 > N parallel requests (N ≥ 20) for the last free slot, released together with a `Barrier`/
 > `TaskCompletionSource` gate → exactly **one** `201`, the rest `409`, and exactly one row in the database.
 
-With more than one free pair, a race test asserts "never more bookings than capacity, never a resource twice" (ADR-0002 #27)
-until the retry after a lost race (EC-18) is built.
+With more than one free pair, a race test asserts that **every** free pair is used (the retry after a lost race, EC-18), on
+distinct technicians and bays, and never more bookings than capacity.
 
 A race test passing once proves little: before approval and after any change to the save path, run it repeatedly
 (at least 15 times in a loop) and report the counts.

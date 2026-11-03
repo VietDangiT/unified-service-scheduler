@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using ServiceScheduler.Domain.Common;
 using ServiceScheduler.Domain.Dealerships;
 using ServiceScheduler.Domain.ServiceTypes;
@@ -10,6 +12,12 @@ namespace ServiceScheduler.Domain.Scheduling;
 /// </summary>
 public sealed class SlotAllocator
 {
+    /// <summary>
+    /// Allocations tried for one booking, the first included, when saves keep losing races on a technician or bay
+    /// (Allocation policy 3).
+    /// </summary>
+    public const int MaxAllocationAttempts = 3;
+
     private readonly IBayAllocationPolicy _bayPolicy;
     private readonly ITechnicianAllocationPolicy _technicianPolicy;
 
@@ -47,6 +55,7 @@ public sealed class SlotAllocator
     [
         .. request.Dealership.Technicians.Where(technician =>
             technician.IsActive
+            && !request.ExcludedTechnicians.Contains(technician.Id)
             && technician.IsQualifiedFor(request.ServiceType.RequiredSkill)
             && technician.IsOnShiftFor(request.Slot)
             && !request.Busy.Technicians.Any(busy => busy.TechnicianId == technician.Id && busy.Blocked.Overlaps(request.Slot))),
@@ -56,6 +65,7 @@ public sealed class SlotAllocator
     [
         .. request.Dealership.Bays.Where(bay =>
             bay.IsActive
+            && !request.ExcludedBays.Contains(bay.Id)
             && !request.Busy.Bays.Any(busy => busy.BayId == bay.Id && busy.Blocked.Overlaps(request.Slot))),
     ];
 
@@ -77,4 +87,11 @@ public sealed class SlotAllocator
 public sealed record Allocation(ServiceBayId BayId, TechnicianId TechnicianId, TimeSlot Slot);
 
 /// <param name="Slot">The validated service interval.</param>
-public sealed record AllocationRequest(Dealership Dealership, ServiceType ServiceType, TimeSlot Slot, BusyIntervals Busy);
+public sealed record AllocationRequest(Dealership Dealership, ServiceType ServiceType, TimeSlot Slot, BusyIntervals Busy)
+{
+    /// <summary>Technicians lost to a concurrent booking that the busy intervals may not show yet (Allocation policy 3).</summary>
+    public IImmutableSet<TechnicianId> ExcludedTechnicians { get; init; } = ImmutableHashSet<TechnicianId>.Empty;
+
+    /// <summary>Bays lost to a concurrent booking that the busy intervals may not show yet (Allocation policy 3).</summary>
+    public IImmutableSet<ServiceBayId> ExcludedBays { get; init; } = ImmutableHashSet<ServiceBayId>.Empty;
+}

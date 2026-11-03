@@ -30,7 +30,7 @@ than a little duplication. Test code may repeat setup for readability; use build
 | Strategy | `IBayAllocationPolicy`, `ITechnicianAllocationPolicy` | Allocation rules can vary without touching the booking flow |
 | Repository + Unit of Work | Ports in Application, EF Core in Infrastructure | Aggregate persistence without leaking EF Core |
 | Factory method | `Appointment.Book(...)`, value-object `Create(...)` | Objects are valid from construction |
-| Options | `IOptions<BookingOptions>` | Retry count, alternatives and horizon are configuration; the 15-minute grid is a domain constant (ADR-0002 #7) |
+| Options | `IOptions<BookingOptions>` (when needed) | Alternatives and horizon are configuration. The 15-minute grid and `MaxAllocationAttempts` (3, `booking-domain.md` policy 3) are domain constants; race tests with "exactly N" assume N ≤ the attempt count |
 | Decorator (if needed) | Cross-cutting concerns around handlers | Keep handlers single-purpose |
 
 ## Language and style

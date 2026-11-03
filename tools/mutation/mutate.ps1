@@ -35,6 +35,9 @@ $SB = "src\ServiceScheduler.Domain\Dealerships\ServiceBay.cs"
 $TC = "src\ServiceScheduler.Domain\Dealerships\Technician.cs"
 $BT = "src\ServiceScheduler.Domain\Dealerships\BayType.cs"
 $BE = "src\ServiceScheduler.Domain\Scheduling\BookingErrors.cs"
+$H = "src\ServiceScheduler.Application\Appointments\BookAppointmentHandler.cs"
+
+$retryCondition = "if (!IsLostRace(saved.Error) || attempt == SlotAllocator.MaxAllocationAttempts)"
 
 $ownerBlock = "        if (request.Vehicle.OwnerId != request.CustomerId)`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.VehicleNotOwnedByCustomer);`n        }`n`n"
 $offeredBlock = "        if (!IsOffered(request.Dealership, request.ServiceType))`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.ServiceNotOfferedAtDealership);`n        }`n`n"
@@ -81,6 +84,13 @@ $mutations = @(
     @{ Name = "Rule 3 requires all bays";               File = $V; Old = "dealership.Bays.Any("; New = "dealership.Bays.All(" }
     # Error kinds decide the HTTP status (EC-84)
     @{ Name = "ServiceNotOffered becomes a Conflict";   File = $BE; Old = "required skill.`",`n        ErrorKind.Validation"; New = "required skill.`",`n        ErrorKind.Conflict" }
+    # Retry after a lost race (step 9, Allocation policy 3 and 4)
+    @{ Name = "No retry after a lost race";             File = $H; Old = $retryCondition; New = "if (true)" }
+    @{ Name = "VehicleAlreadyBooked retried";           File = $H; Old = "!IsLostRace(saved.Error) || "; New = "" }
+    @{ Name = "First conflict returned, not the last";  File = $H; Old = @("for (int attempt = 1; ; attempt++)", "            $retryCondition", "return Result.Failure<AppointmentDto>(saved.Error);"); New = @("DomainError? firstConflict = null;`n        for (int attempt = 1; ; attempt++)", "            firstConflict ??= saved.Error;`n            $retryCondition", "return Result.Failure<AppointmentDto>(firstConflict);") }
+    @{ Name = "Lost resource not excluded";             File = $H; Old = "allocationRequest = ExcludeLostResource(allocationRequest, allocation.Value, saved.Error);"; New = "" }
+    @{ Name = "Attempts not bounded";                   File = $H; Old = " || attempt == SlotAllocator.MaxAllocationAttempts"; New = "" }
+    @{ Name = "Attempts bounded at 1";                  File = $A; Old = "public const int MaxAllocationAttempts = 3;"; New = "public const int MaxAllocationAttempts = 1;" }
 )
 
 $tests = Join-Path $Root "tests\ServiceScheduler.UnitTests"
