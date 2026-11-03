@@ -62,7 +62,7 @@ were run:
 
 | Mutation | Integration tests |
 |---|---|
-| 1. Reader ignores existing appointments | Killed (2 failed) |
+| 1. Reader ignores existing appointments | Killed (2 failed) at the time. **No longer true after step 5** (`test-auditor`, 2026-11-03): the constraint rejection is now also a `409`, so this mutation survives; see `docs/edge-cases.md`, *Deferred* |
 | 2. Overlap compares start only | Killed (1 failed) |
 | 3. Touching intervals overlap | Killed (1 failed) |
 | 4. Reader sees only jobs starting at or after the request | Killed (1 failed) |
