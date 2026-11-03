@@ -753,13 +753,13 @@ sequenceDiagram
         else Pair found
             AL-->>H: Allocation(bay, technician)
             H->>RP: AddAsync(Appointment.Book(id, ...))
-            RP->>DB: BEGIN; lock technician row, then bay row (FOR NO KEY UPDATE)
+            RP->>DB: BEGIN, then lock technician row, then bay row (FOR NO KEY UPDATE)
             RP->>DB: INSERT INTO appointments
             alt Insert succeeds
                 DB-->>RP: COMMIT
                 RP-->>H: Success(appointment)
             else Exclusion violation 23P01 on technician or bay
-                DB-->>RP: constraint name identifies the resource; ROLLBACK
+                DB-->>RP: constraint name identifies the resource, then ROLLBACK
                 RP-->>H: Failure(capacity error for that resource)
                 H->>H: Exclude resource, record retry metric, try again
             else Exclusion violation 23P01 on vehicle
@@ -809,12 +809,12 @@ sequenceDiagram
     API2->>DB: Read busy intervals
     Note over API1,API2: Both see technician Alice and Bay-1 as free
 
-    API1->>DB: BEGIN; lock Alice, then Bay-1
-    API2->>DB: BEGIN; lock Alice (waits for API1)
-    API1->>DB: INSERT (Alice, Bay-1, 10:00-11:00); COMMIT
-    Note over API2,DB: Lock granted; API2 now sees API1's committed row
-    API2->>DB: lock Bay-1; INSERT (Alice, Bay-1, 10:00-11:00)
-    DB-->>API2: 23P01 ex_appointments_technician_overlap; ROLLBACK
+    API1->>DB: BEGIN, then lock Alice, then Bay-1
+    API2->>DB: BEGIN, then lock Alice (waits for API1)
+    API1->>DB: INSERT (Alice, Bay-1, 10:00-11:00), then COMMIT
+    Note over API2,DB: Lock granted, so API2 now sees API1's committed row
+    API2->>DB: lock Bay-1, then INSERT (Alice, Bay-1, 10:00-11:00)
+    DB-->>API2: 23P01 ex_appointments_technician_overlap, then ROLLBACK
 
     API2->>API2: Exclude Alice, re-run allocation
     alt Another qualified technician and bay are free
