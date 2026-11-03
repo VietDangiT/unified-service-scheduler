@@ -14,32 +14,34 @@ docker compose up --build      # PostgreSQL 16 + the API on http://localhost:808
 docker compose down -v         # stop and remove the demo database
 ```
 
-On startup the API applies the database migration, which includes the demo seed:
+On startup the API applies the database migrations. These include the demo dealership **Northgate**, open Monday to
+Friday 08:00–17:00:
 
-- dealership *Riverside*, open on Tuesdays 08:00–17:00;
-- technician *Alice* (General skill);
-- one Standard bay;
-- a 60-minute oil change;
-- a sample customer and vehicle.
+| Technician | Skills | Shift |
+|---|---|---|
+| Ben | General | 08:00–17:00 |
+| Chloe | General, EV | 08:00–17:00 |
+| Dan | General, Alignment | 12:00–17:00 |
 
-Then send the requests in [`src/ServiceScheduler.Api/ServiceScheduler.Api.http`](src/ServiceScheduler.Api/ServiceScheduler.Api.http)
-(VS Code REST Client, Rider or Visual Studio), or use `curl`:
+The bays are Bay-A and Bay-B (Standard), Bay-EV and Bay-Align. The services are an oil change (60 min), an EV battery
+check (90 min) and a wheel alignment (60 min). Three customers own four vehicles, one of them electric.
 
-```bash
-curl -i -X POST http://localhost:8080/api/appointments -H "Content-Type: application/json" -d '{
-  "customerId": "c0570000-0000-0000-0000-000000000001",
-  "vehicleId": "ca700000-0000-0000-0000-000000000001",
-  "serviceTypeId": "5e7c0000-0000-0000-0000-000000000001",
-  "dealershipId": "dea10000-0000-0000-0000-000000000001",
-  "requestedStart": "2026-11-10T09:00:00"
-}'
-```
+The demo script is [`src/ServiceScheduler.Api/ServiceScheduler.Api.http`](src/ServiceScheduler.Api/ServiceScheduler.Api.http).
+Run its requests in order with VS Code REST Client, Rider or Visual Studio, starting from a fresh database
+(`docker compose down -v`). All requests are on Tuesday `@date`:
 
-| Request | Result |
-|---|---|
-| The booking above | `201 Created`, with the technician and bay assigned |
-| The same request again | `409 NoQualifiedTechnicianAvailable`: Alice is already booked |
-| An unknown dealership | `404 NotFound` |
+| # | Request | Result | Shows |
+|---|---|---|---|
+| 1 | Ford Focus, oil change 09:00 | `201` Ben + Bay-A | The least specialised technician and bay are used first |
+| 2 | Toyota Corolla, oil change 09:00 | `201` Chloe + Bay-B | Ben is busy, so another qualified technician and free bay are chosen |
+| 3 | VW Golf, oil change 09:00 | `409 NoQualifiedTechnicianAvailable` | Dan's shift starts at 12:00, so nobody is free |
+| 4 | Nissan Leaf, EV battery check 09:00 | `409` | Chloe, the only EV technician, is busy |
+| 5 | Nissan Leaf, EV battery check 10:00 | `201` Chloe + Bay-EV | Back-to-back with her 09:00–10:00 job |
+| 6 | VW Golf, wheel alignment 09:00, then 13:00 | `409`, then `201` Dan + Bay-Align | The shift must cover the whole service |
+| 7 | Ford Focus, oil change on Saturday | `422 OutsideOpeningHours` | Opening hours |
+| 8 | Unknown dealership | `404 NotFound` | |
+
+The *Riverside* dealership from the first migration is still seeded but unused; tests create their own data.
 
 Times are plain local times on one clock, with no offset (ADR-0002 #25). "Now" is the API container's clock, which is
 `TZ=UTC` by default. Set `TZ` before `docker compose up` to change it.
@@ -57,20 +59,24 @@ pwsh tools/mutation/mutate.ps1                           # injects known bugs; e
 
 What the integration tests prove:
 
+Every integration test creates its own dealership, technicians, shifts, bays, service type, customer and vehicles, so it
+is correct because of its own scenario, not because of shared seed data.
+
 | Test class | What it proves |
 |---|---|
-| `PostAppointmentTests` | Requirement 2: a busy technician or bay is refused with `409`, and back-to-back bookings are accepted |
-| `BookingRaceTests` | 20 parallel requests for the last slot: exactly one `201`, nineteen `409`, no `500`, one row stored |
-| `AnotherFreeResourceTests` | With a second technician and bay, the busy pair is skipped and the free pair is booked through the real busy-interval query. Every other `409` could also come from the database constraint |
-| `BayRaceTests` | A race lost on the bay is reported as `NoCompatibleBayAvailable` |
-| `LockOrderRaceTests` | Each lock taken before the insert is needed. Without it, concurrent saves deadlock and fail with `500` |
-| `BookingLogTests` | Bookings and rejections are logged as business events with no personal data. An unexpected error is a generic `500`, logged once |
+| `BookingRequestTests` | Requirement 1: a free technician and bay give `201` and a stored appointment; unknown references, a vehicle of another customer, a service the dealership cannot offer, a past or off-grid start and a start outside opening hours are refused with nothing stored |
+| `CapacityTests` | Requirement 2: overlaps (whole, partial), back-to-back, a busy bay, the exact skill, a shift that must cover the whole service, inactive resources, bay types, cancelled appointments, a 50-minute service, the same vehicle twice |
+| `AllocationTests` | The least specialised bay and technician are used first; the less-loaded technician wins a tie |
+| `ConcurrentBookingTests` | 20 parallel requests: never more bookings than capacity, never a technician or bay twice, no `500` |
+| `StaleBusyIntervalTests` | A request that read the busy intervals before a concurrent save gets `409` from the database constraint, not `500` |
+| `LockOrderRaceTests` | Each lock taken before the insert is needed; without it, concurrent saves deadlock and fail with `500` |
+| `BookingLogTests` | Bookings and rejections are logged as business events with no personal data; an unexpected error is a generic `500`, logged once |
 
 ## API
 
 | Method and route | Success | Expected failures |
 |---|---|---|
-| `POST /api/appointments` | `201 Created` + `Location` | `400` malformed body, `404` unknown reference, `409` no technician or bay free, `422` business validation (vehicle not the customer's, past, outside opening hours, off the 15-minute grid, service not offered) |
+| `POST /api/appointments` | `201 Created` + `Location` | `400` malformed body, `404` unknown reference, `409` no technician or bay free or the vehicle is already booked at an overlapping time, `422` business validation (vehicle not the customer's, past, outside opening hours, off the 15-minute grid, service not offered) |
 
 Errors are RFC 9457 `application/problem+json` with a stable `code`.
 

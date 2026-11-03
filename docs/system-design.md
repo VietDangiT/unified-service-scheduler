@@ -497,7 +497,7 @@ classDiagram
     }
     class AppointmentRepository {
         -SchedulingDbContext db
-        -ToCapacityError(constraintName) DomainError?
+        -ToConflictError(constraintName) DomainError?
         -ExistsAsync(id, ct) Task~bool~
     }
     class SchedulingDbContext {

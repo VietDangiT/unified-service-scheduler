@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 using ServiceScheduler.Application.Appointments;
-using ServiceScheduler.Infrastructure.Persistence;
 using ServiceScheduler.IntegrationTests.Fixtures;
 
 namespace ServiceScheduler.IntegrationTests.Api;
@@ -20,23 +19,36 @@ namespace ServiceScheduler.IntegrationTests.Api;
 public sealed class BookingLogTests(SchedulingApiFixture fixture) : IClassFixture<SchedulingApiFixture>, IAsyncLifetime, IDisposable
 {
     // The fixture's clock reads Monday 2026-11-02 09:00, so both days are in the future and inside the horizon.
-    // The seed opens the dealership on Tuesdays only.
+    // The builder opens the dealership on Tuesdays only.
     private const string TuesdayTen = "2026-11-03T10:00:00";
     private const string ClosedWednesdayTen = "2026-11-04T10:00:00";
 
     private const string AppointmentBooked = "AppointmentBooked";
     private const string BookingRejected = "BookingRejected";
 
-    // The seeded customer's personal data (CustomerConfiguration), which must never reach a log entry.
-    private static readonly string[] SeededPersonalData = ["Sample Customer", "customer@example.com", "+00 000 000 000"];
+    // The personal data of the customer each test creates, which must never reach a log entry.
+    private const string CustomerFullName = "Maria Lopez";
+    private const string CustomerEmail = "maria.lopez@example.com";
+    private const string CustomerPhone = "+44 20 7946 0958";
+    private static readonly string[] CustomerPersonalData = [CustomerFullName, CustomerEmail, CustomerPhone];
 
     private readonly CapturingLoggerProvider _logs = new();
+    private SchedulingData _data = null!;
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _client = null!;
+
+    private Guid VehicleId => _data.Customer.VehicleIds[0];
 
     public async Task InitializeAsync()
     {
         await fixture.DeleteAppointmentsAsync();
+
+        // Its own dealership, with one technician and one bay, and a customer whose personal data the tests know.
+        _data = await new SchedulingDataBuilder()
+            .WithTechnicians(1)
+            .WithBays(1)
+            .WithCustomer(fullName: CustomerFullName, email: CustomerEmail, phone: CustomerPhone)
+            .BuildAsync(fixture.ConnectionString);
 
         _factory = fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddSingleton<ILoggerProvider>(_logs)));
@@ -60,7 +72,7 @@ public sealed class BookingLogTests(SchedulingApiFixture fixture) : IClassFixtur
     [Fact]
     public async Task PostAppointment_WhenBookingSucceeds_LogsOneAppointmentBookedWithTheResponseIdsAndNoPersonalData()
     {
-        using HttpResponseMessage response = await AppointmentsApi.PostAppointmentAsync(_client, SeedData.VehicleId, TuesdayTen);
+        using HttpResponseMessage response = await AppointmentsApi.PostAppointmentAsync(_client, _data, VehicleId, TuesdayTen);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -74,7 +86,7 @@ public sealed class BookingLogTests(SchedulingApiFixture fixture) : IClassFixtur
         Assert.Equal<object?>(body.GetProperty("technician").GetProperty("id").GetGuid(), booked.ValueOf("TechnicianId"));
         Assert.Equal<object?>(body.GetProperty("serviceBay").GetProperty("id").GetGuid(), booked.ValueOf("ServiceBayId"));
 
-        Assert.All(SeededPersonalData, personalData =>
+        Assert.All(CustomerPersonalData, personalData =>
             Assert.DoesNotContain(entries, entry => entry.Contains(personalData)));
     }
 
@@ -83,7 +95,7 @@ public sealed class BookingLogTests(SchedulingApiFixture fixture) : IClassFixtur
     [Fact]
     public async Task PostAppointment_WhenDealershipIsClosedThatDay_LogsOneBookingRejectedWithOutsideOpeningHoursAndNothingAtError()
     {
-        using HttpResponseMessage response = await AppointmentsApi.PostAppointmentAsync(_client, SeedData.VehicleId, ClosedWednesdayTen);
+        using HttpResponseMessage response = await AppointmentsApi.PostAppointmentAsync(_client, _data, VehicleId, ClosedWednesdayTen);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -93,7 +105,7 @@ public sealed class BookingLogTests(SchedulingApiFixture fixture) : IClassFixtur
         CapturedLogEntry rejected = Assert.Single(entries, entry => entry.EventId.Name == BookingRejected);
         Assert.Equal(LogLevel.Information, rejected.Level);
         Assert.Equal<object?>("OutsideOpeningHours", rejected.ValueOf("Reason"));
-        Assert.Equal<object?>(SeedData.DealershipId, rejected.ValueOf("DealershipId"));
+        Assert.Equal<object?>(_data.DealershipId, rejected.ValueOf("DealershipId"));
 
         Assert.DoesNotContain(entries, entry => entry.EventId.Name == AppointmentBooked);
         Assert.DoesNotContain(entries, entry => entry.Level == LogLevel.Error);
@@ -116,7 +128,7 @@ public sealed class BookingLogTests(SchedulingApiFixture fixture) : IClassFixtur
         using HttpClient failingClient = failingFactory.CreateClient();
         _logs.Clear();
 
-        using HttpResponseMessage response = await AppointmentsApi.PostAppointmentAsync(failingClient, SeedData.VehicleId, TuesdayTen);
+        using HttpResponseMessage response = await AppointmentsApi.PostAppointmentAsync(failingClient, _data, VehicleId, TuesdayTen);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);

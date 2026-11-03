@@ -16,6 +16,7 @@ public sealed class BookingErrorsTests
         { BookingErrors.OutsideOpeningHours, ErrorKind.Validation },
         { BookingErrors.NoQualifiedTechnicianAvailable, ErrorKind.Conflict },
         { BookingErrors.NoCompatibleBayAvailable, ErrorKind.Conflict },
+        { BookingErrors.VehicleAlreadyBooked, ErrorKind.Conflict },
         { BookingErrors.NotFound, ErrorKind.NotFound },
     };
 

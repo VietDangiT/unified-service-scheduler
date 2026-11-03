@@ -15,7 +15,8 @@ using Testcontainers.PostgreSql;
 namespace ServiceScheduler.IntegrationTests.Fixtures;
 
 /// <summary>
-/// The real HTTP pipeline against real PostgreSQL, with the schema and seed data from the real migration.
+/// The real HTTP pipeline against real PostgreSQL, with the schema from the real migration. The migration also seeds a
+/// demo dealership, which no test uses: each test arranges its own with <see cref="SchedulingDataBuilder"/>.
 /// </summary>
 public sealed class SchedulingApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
@@ -44,7 +45,8 @@ public sealed class SchedulingApiFixture : WebApplicationFactory<Program>, IAsyn
         await _database.DisposeAsync();
     }
 
-    // The tests in a class share this database, so each one starts with no appointments. The seed rows stay.
+    // The tests in a class share this database, so each one starts with no appointments and the whole-table counts
+    // below see only its own. The reference rows of earlier tests stay; they belong to other dealerships.
     public async Task DeleteAppointmentsAsync()
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
@@ -65,24 +67,40 @@ public sealed class SchedulingApiFixture : WebApplicationFactory<Program>, IAsyn
         return (long)(await command.ExecuteScalarAsync() ?? 0L);
     }
 
-    // A vehicle of the seeded customer. Idempotent, because the database outlives each test and only appointments are reset.
-    public async Task AddVehicleAsync(Guid vehicleId, string vin)
+    // Every stored appointment, oldest start first, read directly for the same reason as the count above.
+    public async Task<IReadOnlyList<StoredAppointment>> ReadAppointmentsAsync()
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
 
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO vehicles (id, customer_id, vin, make, model, model_year)
-            VALUES (@id, @customerId, @vin, 'Toyota', 'Corolla', 2022)
-            ON CONFLICT (id) DO NOTHING
+            SELECT id, customer_id, vehicle_id, service_type_id, dealership_id, technician_id, service_bay_id,
+                   start_at, end_at, blocked_until, status
+            FROM appointments
+            ORDER BY start_at, id
             """,
             connection);
-        command.Parameters.AddWithValue("id", vehicleId);
-        command.Parameters.AddWithValue("customerId", SeedData.CustomerId);
-        command.Parameters.AddWithValue("vin", vin);
 
-        await command.ExecuteNonQueryAsync();
+        await using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
+        var rows = new List<StoredAppointment>();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new StoredAppointment(
+                Id: reader.GetGuid(0),
+                CustomerId: reader.GetGuid(1),
+                VehicleId: reader.GetGuid(2),
+                ServiceTypeId: reader.GetGuid(3),
+                DealershipId: reader.GetGuid(4),
+                TechnicianId: reader.GetGuid(5),
+                ServiceBayId: reader.GetGuid(6),
+                StartAt: reader.GetDateTime(7),
+                EndAt: reader.GetDateTime(8),
+                BlockedUntil: reader.GetDateTime(9),
+                Status: reader.GetString(10)));
+        }
+
+        return rows;
     }
 
     // The same API and database, but every request reads the busy intervals as empty, as if it read them before a
@@ -108,3 +126,17 @@ public sealed class SchedulingApiFixture : WebApplicationFactory<Program>, IAsyn
         });
     }
 }
+
+/// <summary>One row of the <c>appointments</c> table, as <see cref="SchedulingApiFixture.ReadAppointmentsAsync"/> read it.</summary>
+public sealed record StoredAppointment(
+    Guid Id,
+    Guid CustomerId,
+    Guid VehicleId,
+    Guid ServiceTypeId,
+    Guid DealershipId,
+    Guid TechnicianId,
+    Guid ServiceBayId,
+    DateTime StartAt,
+    DateTime EndAt,
+    DateTime BlockedUntil,
+    string Status);

@@ -10,7 +10,6 @@ using ServiceScheduler.Domain.Customers;
 using ServiceScheduler.Domain.Dealerships;
 using ServiceScheduler.Domain.Scheduling;
 using ServiceScheduler.Domain.ServiceTypes;
-using ServiceScheduler.Infrastructure.Persistence;
 using ServiceScheduler.IntegrationTests.Fixtures;
 
 namespace ServiceScheduler.IntegrationTests.Persistence;
@@ -18,12 +17,10 @@ namespace ServiceScheduler.IntegrationTests.Persistence;
 // Saves that share only one resource, while a holder keeps the rows of the other one, so each test checks both of
 // AppointmentRepository's row locks: the held one on every run, the shared one through the race (see each test).
 // Through the API every request is allocated the same technician and bay, which either lock alone already queues, so
-// these call the repository directly. A class of its own, with its own fixture and database, so the extra technicians
-// and bays never change what the other classes allocate.
+// these call the repository directly. A class of its own, with its own fixture and database, as each race class has.
 public sealed class LockOrderRaceTests(SchedulingApiFixture fixture) : IClassFixture<SchedulingApiFixture>, IAsyncLifetime
 {
     private const int RacingSaves = 20;
-    private const short Tuesday = (short)DayOfWeek.Tuesday;
 
     // The rows the holder keeps: the lock each save takes before the one under test, so every save waits there.
     private const string HoldTechnicianRowsSql = "SELECT 1 FROM technicians WHERE id = ANY(@ids) FOR NO KEY UPDATE";
@@ -36,43 +33,25 @@ public sealed class LockOrderRaceTests(SchedulingApiFixture fixture) : IClassFix
     private static readonly DateTime TuesdayTen = new(2026, 11, 3, 10, 0, 0);
     private static readonly DateTime MondayNine = new(2026, 11, 2, 9, 0, 0);
 
-    // The seeded oil change: 60 minutes, General skill, Standard bay.
-    private static readonly ServiceType OilChange = new(
-        new ServiceTypeId(SeedData.OilChangeServiceTypeId), TimeSpan.FromMinutes(60), new Skill("General"), BayType.Standard);
+    // One dealership with 20 General technicians, 20 Standard bays and 20 vehicles, a fresh one for each test. The
+    // repository stores only IDs and checks neither skills nor shifts, so each test picks the technician and bay itself
+    // instead of asking the allocator.
+    private SchedulingData _data = null!;
 
-    // The repository stores only IDs, so the seeded dealership carries just its Tuesday hours; each test picks the
-    // technician and bay itself instead of asking the allocator.
-    private static readonly Dealership SeededDealership = new(
-        new DealershipId(SeedData.DealershipId),
-        new WeeklySchedule(new Dictionary<DayOfWeek, TimeRange> { [DayOfWeek.Tuesday] = new(new TimeOnly(8, 0), new TimeOnly(17, 0)) }),
-        [],
-        []);
+    private IReadOnlyList<Guid> RacingVehicleIds => _data.Customer.VehicleIds;
 
-    // Added by the test setup, not the migration seed. A range of their own, apart from BookingRaceTests (0001) and
-    // BayRaceTests (0002).
-    private static readonly Guid[] RacingVehicleIds =
-        [.. Enumerable.Range(1, RacingSaves).Select(number => new Guid($"ca700000-0000-0000-0003-{number:D12}"))];
+    private IReadOnlyList<Guid> RacingTechnicianIds => _data.TechnicianIds;
 
-    private static readonly Guid[] AddedTechnicianIds =
-        [.. Enumerable.Range(1, RacingSaves - 1).Select(number => new Guid($"7ec40000-0000-0000-0003-{number:D12}"))];
-
-    private static readonly Guid[] AddedBayIds =
-        [.. Enumerable.Range(1, RacingSaves - 1).Select(number => new Guid($"ba900000-0000-0000-0003-{number:D12}"))];
-
-    private static readonly Guid[] RacingTechnicianIds = [SeedData.TechnicianId, .. AddedTechnicianIds];
-    private static readonly Guid[] RacingBayIds = [SeedData.ServiceBayId, .. AddedBayIds];
+    private IReadOnlyList<Guid> RacingBayIds => _data.BayIds;
 
     public async Task InitializeAsync()
     {
         await fixture.DeleteAppointmentsAsync();
-
-        for (int index = 0; index < RacingVehicleIds.Length; index++)
-        {
-            await fixture.AddVehicleAsync(RacingVehicleIds[index], $"LOCKRACE{index + 1:D9}");
-        }
-
-        await AddGeneralTechniciansAsync();
-        await AddStandardBaysAsync();
+        _data = await new SchedulingDataBuilder()
+            .WithTechnicians(RacingSaves)
+            .WithBays(RacingSaves)
+            .WithCustomer(vehicles: RacingSaves)
+            .BuildAsync(fixture.ConnectionString);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -86,10 +65,10 @@ public sealed class LockOrderRaceTests(SchedulingApiFixture fixture) : IClassFix
     public async Task AddAsync_WhenTwentySavesOnDifferentTechniciansRaceForTheSameBay_ReturnsOneSavedAndNoCompatibleBayForTheRestAndStoresOneAppointment()
     {
         Appointment[] appointments =
-            [.. Enumerable.Range(0, RacingSaves).Select(index => BookAtTuesdayTen(RacingVehicleIds[index], RacingTechnicianIds[index], SeedData.ServiceBayId))];
+            [.. Enumerable.Range(0, RacingSaves).Select(index => BookAtTuesdayTen(RacingVehicleIds[index], RacingTechnicianIds[index], RacingBayIds[0]))];
 
         Task<Result<Appointment>>[] saves =
-            await SaveTogetherOnceHeldRowsAreReleasedAsync(appointments, HoldTechnicianRowsSql, RacingTechnicianIds, "technician");
+            await SaveTogetherOnceHeldRowsAreReleasedAsync(appointments, HoldTechnicianRowsSql, [.. RacingTechnicianIds], "technician");
 
         Assert.All(saves, save => Assert.True(save.IsCompletedSuccessfully, $"The save threw: {save.Exception}"));
         Result<Appointment>[] results = await Task.WhenAll(saves);
@@ -107,10 +86,10 @@ public sealed class LockOrderRaceTests(SchedulingApiFixture fixture) : IClassFix
     public async Task AddAsync_WhenTwentySavesOnDifferentBaysRaceForTheSameTechnician_ReturnsOneSavedAndNoQualifiedTechnicianForTheRestAndStoresOneAppointment()
     {
         Appointment[] appointments =
-            [.. Enumerable.Range(0, RacingSaves).Select(index => BookAtTuesdayTen(RacingVehicleIds[index], SeedData.TechnicianId, RacingBayIds[index]))];
+            [.. Enumerable.Range(0, RacingSaves).Select(index => BookAtTuesdayTen(RacingVehicleIds[index], RacingTechnicianIds[0], RacingBayIds[index]))];
 
         Task<Result<Appointment>>[] saves =
-            await SaveTogetherOnceHeldRowsAreReleasedAsync(appointments, HoldBayRowsSql, RacingBayIds, "bay");
+            await SaveTogetherOnceHeldRowsAreReleasedAsync(appointments, HoldBayRowsSql, [.. RacingBayIds], "bay");
 
         Assert.All(saves, save => Assert.True(save.IsCompletedSuccessfully, $"The save threw: {save.Exception}"));
         Result<Appointment>[] results = await Task.WhenAll(saves);
@@ -120,11 +99,20 @@ public sealed class LockOrderRaceTests(SchedulingApiFixture fixture) : IClassFix
     }
 
     // Built by the real domain factory, as the booking handler does, with the technician and bay chosen by the test.
-    private static Appointment BookAtTuesdayTen(Guid vehicleId, Guid technicianId, Guid bayId)
+    // The dealership carries just its Tuesday hours, and the service type is the builder's oil change: 60 minutes,
+    // General skill, Standard bay.
+    private Appointment BookAtTuesdayTen(Guid vehicleId, Guid technicianId, Guid bayId)
     {
-        var customerId = new CustomerId(SeedData.CustomerId);
-        var request = new BookingRequest(customerId, new Vehicle(new VehicleId(vehicleId), customerId), SeededDealership, TuesdayTen, OilChange);
-        var allocation = new Allocation(new ServiceBayId(bayId), new TechnicianId(technicianId), TimeSlot.Create(TuesdayTen, OilChange.Duration));
+        var dealership = new Dealership(
+            new DealershipId(_data.DealershipId),
+            new WeeklySchedule(new Dictionary<DayOfWeek, TimeRange> { [DayOfWeek.Tuesday] = new(new TimeOnly(8, 0), new TimeOnly(17, 0)) }),
+            [],
+            []);
+        var oilChange = new ServiceType(
+            new ServiceTypeId(_data.ServiceTypeId), TimeSpan.FromMinutes(60), new Skill(SchedulingDataBuilder.GeneralSkill), BayType.Standard);
+        var customerId = new CustomerId(_data.Customer.Id);
+        var request = new BookingRequest(customerId, new Vehicle(new VehicleId(vehicleId), customerId), dealership, TuesdayTen, oilChange);
+        var allocation = new Allocation(new ServiceBayId(bayId), new TechnicianId(technicianId), TimeSlot.Create(TuesdayTen, oilChange.Duration));
 
         return Appointment.Book(new AppointmentId(Guid.CreateVersion7()), request, allocation, MondayNine);
     }
@@ -222,60 +210,4 @@ public sealed class LockOrderRaceTests(SchedulingApiFixture fixture) : IClassFix
     // Waits for every save without throwing on the first fault, so the test can report each save that threw.
     private static async Task WhenAllCompletedAsync(Task[] saves) =>
         await Task.WhenAll(saves).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
-
-    // Idempotent, because the fixture's database outlives each test and only appointments are reset. Valid rows (General
-    // skill, Tuesday shift) although the repository checks neither.
-    private async Task AddGeneralTechniciansAsync()
-    {
-        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
-        await connection.OpenAsync();
-
-        for (int index = 0; index < AddedTechnicianIds.Length; index++)
-        {
-            await using var command = new NpgsqlCommand(
-                """
-                INSERT INTO technicians (id, dealership_id, name, is_active)
-                VALUES (@id, @dealershipId, @name, true)
-                ON CONFLICT (id) DO NOTHING;
-
-                INSERT INTO technician_skills (technician_id, skill)
-                VALUES (@id, 'General')
-                ON CONFLICT (technician_id, skill) DO NOTHING;
-
-                INSERT INTO technician_shifts (technician_id, day_of_week, starts_at, ends_at)
-                VALUES (@id, @tuesday, '08:00', '17:00')
-                ON CONFLICT (technician_id, day_of_week) DO NOTHING;
-                """,
-                connection);
-            command.Parameters.AddWithValue("id", AddedTechnicianIds[index]);
-            command.Parameters.AddWithValue("dealershipId", SeedData.DealershipId);
-            command.Parameters.AddWithValue("name", $"LockRace-Technician-{index + 1:D2}");
-            command.Parameters.AddWithValue("tuesday", Tuesday);
-
-            await command.ExecuteNonQueryAsync();
-        }
-    }
-
-    // Idempotent, for the same reason. Active Standard bays, which the oil change can use.
-    private async Task AddStandardBaysAsync()
-    {
-        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
-        await connection.OpenAsync();
-
-        for (int index = 0; index < AddedBayIds.Length; index++)
-        {
-            await using var command = new NpgsqlCommand(
-                """
-                INSERT INTO service_bays (id, dealership_id, name, bay_type, is_active)
-                VALUES (@id, @dealershipId, @name, 'Standard', true)
-                ON CONFLICT (id) DO NOTHING
-                """,
-                connection);
-            command.Parameters.AddWithValue("id", AddedBayIds[index]);
-            command.Parameters.AddWithValue("dealershipId", SeedData.DealershipId);
-            command.Parameters.AddWithValue("name", $"LockRace-Bay-{index + 1:D2}");
-
-            await command.ExecuteNonQueryAsync();
-        }
-    }
 }
