@@ -23,7 +23,8 @@ paths:
 - Hot paths and frequently logged events use the `[LoggerMessage]` source generator.
 - Levels: `Debug` diagnostics; `Information` business events (booked, cancelled); `Warning` handled
   anomalies (allocation retry after a constraint violation); `Error` failures needing attention.
-  Expected business rejections (409/422) are `Information`, not `Error`.
+  Expected business rejections (409/422) are `Information`, not `Error`. A client's malformed request (400) is never
+  logged above `Information`.
 - Log once per failure, at the boundary that handles it. Do not log-and-rethrow at every layer.
 - Every log carries the trace/correlation ID (automatic via OpenTelemetry + logging scopes).
 - Never log personal data, connection strings, tokens or full request bodies. VINs may be logged.

@@ -22,15 +22,22 @@ internal static class AppointmentEndpoints
     private static async Task<Results<Created<AppointmentResponse>, ProblemHttpResult>> BookAsync(
         BookAppointmentRequest request,
         BookAppointmentHandler handler,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
+        ILogger logger = loggerFactory.CreateLogger(typeof(AppointmentEndpoints));
+
         Result<AppointmentDto> result = await handler.HandleAsync(request.ToCommand(), cancellationToken);
         if (!result.IsSuccess)
         {
+            logger.BookingRejected(request.DealershipId, result.Error.Code);
             return result.Error.ToProblem();
         }
 
-        AppointmentResponse response = AppointmentResponse.From(result.Value);
+        AppointmentDto appointment = result.Value;
+        logger.AppointmentBooked(appointment.Id, appointment.DealershipId, appointment.Technician.Id, appointment.ServiceBay.Id);
+
+        AppointmentResponse response = AppointmentResponse.From(appointment);
 
         return TypedResults.Created($"/api/appointments/{response.Id}", response);
     }

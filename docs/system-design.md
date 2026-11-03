@@ -965,10 +965,22 @@ Content-Type: application/json
 
 ### Logs
 
-- Structured JSON (message templates; `[LoggerMessage]` source generator on hot paths).
-- Business events at `Information`: `AppointmentBooked`, `BookingRejected {Reason}`, `AppointmentCancelled`.
-- Allocation retry after a constraint violation at `Warning` (signals contention).
-- Personal data never logged; IDs and VINs only. Every entry carries `TraceId`/`SpanId`.
+**Built (step 4 logging, EC-79 to EC-82):**
+
+- Business events at `Information`, written by the booking endpoint with `[LoggerMessage]`:
+  - `AppointmentBooked` with `AppointmentId`, `DealershipId`, `TechnicianId` and `ServiceBayId`;
+  - `BookingRejected` with `DealershipId` and `Reason` (the error code).
+- One `IExceptionHandler` logs an unexpected exception once at `Error` (`UnhandledRequestException`, with method and
+  path) and returns a generic `500` ProblemDetails with a `traceId` and no exception details, in every environment.
+- A malformed body is a `400` problem and is not logged above `Information`.
+- Personal data is never logged: IDs and error codes only.
+
+**Planned:**
+
+- Structured JSON output.
+- `AppointmentCancelled`.
+- Allocation retry at `Warning`.
+- `TraceId`/`SpanId` on every entry, through OpenTelemetry. Today scopes are off, so console lines carry no trace ID.
 
 ### Traces
 

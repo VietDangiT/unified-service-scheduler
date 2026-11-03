@@ -157,3 +157,25 @@ Tools: Claude Code (primary agent).
   - `code-reviewer` also confirmed the lock mode in a throwaway PostgreSQL: 0 deadlocks in 114 losers with both locks, 38 in 76 with the technician lock only.
   - Results are in `docs/work-packages/step-5-race-to-409.md`.
 - **Lesson:** a fix for a race must be measured over many runs, not reasoned about. And the tests for a concurrency guard must be checked by deleting the guard, because a single shared technician and bay hid that each lock was untested.
+
+### 2026-11-03: Minimal logging; the orchestrator recorded a red result it had not read
+- **Phase:** implementation, review (step 4 logging, EC-79 to EC-82)
+- **I asked the AI to:** add the minimum logging the rules ask for, after Docker and the README:
+  - one `AppointmentBooked` entry per booking;
+  - one `BookingRejected` entry at `Information` per rejection;
+  - a generic `500` that is logged once and leaks nothing;
+  - a `400` for a malformed body.
+- **The AI produced:**
+  - Four integration tests with a hand-written capturing logger.
+  - Two `[LoggerMessage]` events in the Api layer.
+  - One `IExceptionHandler`, plus `ThrowOnBadRequest = false` and `UseStatusCodePages()`, so a bad body stays a `400` problem in every environment.
+  - The orchestrator recorded EC-82 as "already covered" (passing before any code was written).
+- **What I accepted, changed or rejected, and why:**
+  - I accepted the design.
+  - `code-reviewer` ran EC-82 against the code from before green and showed it had failed for the right reason: the Development exception page logged a client's malformed body at `Error`. The orchestrator had truncated the test output and repeated the implementer's prediction. The record was corrected, and `.claude/rules/testing.md` now requires the red record to quote each test's actual result.
+  - The reviewer also showed that mutation 7b (no custom handler in Development) survives only because the framework fallback behaves almost the same, and that a bad body returned an empty `400`. That was fixed with `UseStatusCodePages()`.
+- **How I verified it:**
+  - Orchestrator re-runs: build clean, 73/73 unit, 13/13 integration, format clean, `mutate.ps1` 26/26, test fingerprint `332fc9c5` unchanged.
+  - Hand mutations: 1–6, 7a and 8 killed; 7b survives outside the specified contract.
+  - The implementer probed the real API: `400`, `422`, `201` and `409` all came back as problem+json with a `traceId`.
+- **Lesson:** an "already covered" claim is a result, not a prediction. It has to be read from the full test output, because a truncated log hid the one line that mattered.

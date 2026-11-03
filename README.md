@@ -63,6 +63,7 @@ What the integration tests prove:
 | `BookingRaceTests` | 20 parallel requests for the last slot: exactly one `201`, nineteen `409`, no `500`, one row stored |
 | `BayRaceTests` | A race lost on the bay is reported as `NoCompatibleBayAvailable` |
 | `LockOrderRaceTests` | Each lock taken before the insert is needed. Without it, concurrent saves deadlock and fail with `500` |
+| `BookingLogTests` | Bookings and rejections are logged as business events with no personal data. An unexpected error is a generic `500`, logged once |
 
 ## API
 
