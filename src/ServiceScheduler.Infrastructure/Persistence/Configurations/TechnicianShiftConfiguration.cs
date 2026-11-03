@@ -30,5 +30,6 @@ internal sealed class TechnicianShiftConfiguration : IEntityTypeConfiguration<Te
             StartsAt = new TimeOnly(8, 0),
             EndsAt = new TimeOnly(17, 0),
         });
+        builder.HasData(NorthgateDemoData.TechnicianShifts);
     }
 }

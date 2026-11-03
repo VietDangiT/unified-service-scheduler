@@ -51,7 +51,9 @@ starts with a test that reproduces the bug.
 - A test that proves a resource was skipped because it is busy must make sure no later tie-break (load, ID) would
   choose the other resource on its own.
 - Tests are independent and order-agnostic; each integration test resets data (Respawn, a fresh schema, or deleting the
-  tables a test writes while keeping the migration seed). Reference rows a test adds are inserted idempotently with fixed IDs.
+  tables a test writes). Integration tests never use the migration seed: each test creates its own dealership, resources,
+  customer and vehicles with `SchedulingDataBuilder` (fresh IDs), stating only what differs from the defaults, so a test is
+  correct because of its own Given, not because of shared data.
 - Mutations that only integration tests can catch are applied by hand to a copy of the repository; record each one and its
   result in the work package.
 - Assertions use xUnit `Assert` (or Shouldly if approved). Do not use FluentAssertions v8+ (commercial licence).
@@ -63,6 +65,9 @@ The concurrency test is mandatory:
 
 > N parallel requests (N ≥ 20) for the last free slot, released together with a `Barrier`/
 > `TaskCompletionSource` gate → exactly **one** `201`, the rest `409`, and exactly one row in the database.
+
+With more than one free pair, a race test asserts that **every** free pair is used (the retry after a lost race, EC-18), on
+distinct technicians and bays, and never more bookings than capacity.
 
 A race test passing once proves little: before approval and after any change to the save path, run it repeatedly
 (at least 15 times in a loop) and report the counts.

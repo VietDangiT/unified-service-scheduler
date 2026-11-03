@@ -35,5 +35,6 @@ internal sealed class VehicleConfiguration : IEntityTypeConfiguration<VehicleRow
             Model = "Civic",
             ModelYear = 2021,
         });
+        builder.HasData(NorthgateDemoData.Vehicles);
     }
 }

@@ -34,5 +34,6 @@ internal sealed class TechnicianConfiguration : IEntityTypeConfiguration<Technic
             Name = "Alice",
             IsActive = true,
         });
+        builder.HasData(NorthgateDemoData.Technicians);
     }
 }

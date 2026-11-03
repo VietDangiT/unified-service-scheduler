@@ -37,5 +37,6 @@ internal sealed class ServiceBayConfiguration : IEntityTypeConfiguration<Service
             BayType = BayType.Standard,
             IsActive = true,
         });
+        builder.HasData(NorthgateDemoData.ServiceBays);
     }
 }

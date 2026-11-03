@@ -80,8 +80,10 @@ resource on a job that a less specialised one can do.
    When attempts run out, return the capacity error for the resource that conflicted last.
    PostgreSQL reports one violated constraint at a time; a second conflict surfaces on the next attempt.
    A race lost on a technician or bay never becomes a `500` (how the save avoids deadlocks: `persistence.md`,
-   ADR-0001). A race lost on the vehicle is still a `500` until rule 4 is built.
-4. A violation on the **vehicle** constraint is not retried: return `VehicleAlreadyBooked`.
+   ADR-0001).
+4. A violation on the **vehicle** constraint is not retried: return `VehicleAlreadyBooked` (`409`, ADR-0002 #26). The up-front
+   validation rule 8 is still parked, so today the constraint is what catches it, and only when the allocator picked a
+   different pair. When the vehicle's own pair is the one chosen, the capacity error wins.
 5. A capacity error (`NoQualified…`, `NoCompatible…`) includes up to `AlternativesToSuggest` (3) start
    times: the earliest free starts **after** the requested start, within `AlternativesSearchDays` (7)
    days, never in the past, and not overlapping the vehicle's other bookings. The list may be empty.

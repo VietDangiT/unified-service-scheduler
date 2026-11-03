@@ -14,6 +14,7 @@ public sealed class AppointmentRepository(SchedulingDbContext db) : IAppointment
     // Created by the InitialSchema migration; the name of the violated constraint tells which resource conflicted.
     private const string TechnicianOverlapConstraint = "ex_appointments_technician_overlap";
     private const string BayOverlapConstraint = "ex_appointments_bay_overlap";
+    private const string VehicleOverlapConstraint = "ex_appointments_vehicle_overlap";
 
     public async Task<Result<Appointment>> AddAsync(Appointment appointment, CancellationToken cancellationToken)
     {
@@ -33,8 +34,8 @@ public sealed class AppointmentRepository(SchedulingDbContext db) : IAppointment
         catch (DbUpdateException exception)
             when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.ExclusionViolation } violation)
         {
-            DomainError? capacityError = ToCapacityError(violation.ConstraintName);
-            if (capacityError is null)
+            DomainError? conflictError = ToConflictError(violation.ConstraintName);
+            if (conflictError is null)
             {
                 throw;
             }
@@ -42,7 +43,7 @@ public sealed class AppointmentRepository(SchedulingDbContext db) : IAppointment
             // The row was never saved; stop tracking it so the context does not try to insert it again.
             db.Entry(row).State = EntityState.Detached;
 
-            return Result.Failure<Appointment>(capacityError);
+            return Result.Failure<Appointment>(conflictError);
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -63,11 +64,14 @@ public sealed class AppointmentRepository(SchedulingDbContext db) : IAppointment
             cancellationToken);
     }
 
-    // Only the technician and bay constraints are translated; the vehicle's is not handled yet and stays an exception.
-    private static DomainError? ToCapacityError(string? constraintName) => constraintName switch
+    // Each overlap constraint names its resource. The vehicle's is the only guard for rule 8 until the up-front check is
+    // built (ADR-0002 #26), and it is never worth a retry: another technician or bay cannot free the vehicle. Any other
+    // constraint is a bug and stays an exception.
+    private static DomainError? ToConflictError(string? constraintName) => constraintName switch
     {
         TechnicianOverlapConstraint => BookingErrors.NoQualifiedTechnicianAvailable,
         BayOverlapConstraint => BookingErrors.NoCompatibleBayAvailable,
+        VehicleOverlapConstraint => BookingErrors.VehicleAlreadyBooked,
         _ => null,
     };
 

@@ -22,5 +22,6 @@ internal sealed class TechnicianSkillConfiguration : IEntityTypeConfiguration<Te
             .HasConstraintName("fk_technician_skills_technician");
 
         builder.HasData(new TechnicianSkillRow { TechnicianId = SeedData.TechnicianId, Skill = SeedData.GeneralSkill });
+        builder.HasData(NorthgateDemoData.TechnicianSkills);
     }
 }

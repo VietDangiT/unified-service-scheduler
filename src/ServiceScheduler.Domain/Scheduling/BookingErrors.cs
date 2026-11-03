@@ -29,4 +29,7 @@ public static class BookingErrors
 
     public static DomainError NoCompatibleBayAvailable { get; } = new(
         "NoCompatibleBayAvailable", "No compatible service bay is free for the whole service.", ErrorKind.Conflict);
+
+    public static DomainError VehicleAlreadyBooked { get; } = new(
+        "VehicleAlreadyBooked", "The vehicle already has an appointment at an overlapping time.", ErrorKind.Conflict);
 }

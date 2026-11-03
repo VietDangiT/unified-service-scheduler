@@ -179,3 +179,27 @@ Tools: Claude Code (primary agent).
   - Hand mutations: 1–6, 7a and 8 killed; 7b survives outside the specified contract.
   - The implementer probed the real API: `400`, `422`, `201` and `409` all came back as problem+json with a `traceId`.
 - **Lesson:** an "already covered" claim is a result, not a prediction. It has to be read from the full test output, because a truncated log hid the one line that mattered.
+
+### 2026-11-03: I rejected tests that were only correct because of the seed data
+- **Phase:** testing (step 8)
+- **I asked the AI to:** add more vehicles, technicians, shifts and skills to the seed, so the demo could show more than one technician and one bay.
+- **The AI produced:**
+  - It warned that ten test classes would break if the seed changed. For example, the race test "20 requests, exactly one wins" was only true because the seeded dealership had one technician and one bay.
+  - It proposed adding a separate demo dealership, so the old tests would not have to change.
+- **What I accepted, changed or rejected, and why:**
+  - I rejected that. A test must prove that the code matches the business, not be defined to fit the data.
+  - I also rejected the next proposal, which reworked only the old tests' Arrange, and asked for the suite to be rewritten from the business scenarios.
+  - `domain-analyst` produced 26 scenarios for the brief's three requirements. I approved them, with three decisions recorded as ADR-0002 #26–28:
+    - the same vehicle twice becomes `409 VehicleAlreadyBooked`;
+    - race tests assert "never more than capacity" until the retry exists;
+    - a test may store a cancelled appointment directly.
+  - Every test now creates its own dealership with a test data builder, and no test references the seed.
+  - Writing the scenarios exposed a real defect: booking the same car twice returned `500` whenever another technician and bay were free. It is now `409`.
+  - The analyst also exposed a business gap that stays open: without the retry, simultaneous requests can be refused while a technician is still free.
+- **How I verified it:**
+  - Red: 2 failures for the right reason. Scenario 20 got `500`; the new error row threw `NotImplementedException`. Everything else passed at once.
+  - `domain-analyst`: ready.
+  - Green: 82/82 unit, 54/54 integration, `mutate.ps1` 27/27, race classes 15/15.
+  - Hand mutations: every earlier one was re-run against the new suite, and all were killed except the recorded logging 7b. "The reader ignores bookings" is now caught by five tests instead of one.
+  - `code-reviewer` found no blocker. Its two majors (the README out of step with the code) were fixed before commit.
+- **Lesson:** shared seed data makes a test true by accident. A test should create the situation it names, so that reading it tells you the business case and changing the data cannot make it lie.

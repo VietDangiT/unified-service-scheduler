@@ -32,5 +32,6 @@ internal sealed class ServiceTypeConfiguration : IEntityTypeConfiguration<Servic
             RequiredSkill = SeedData.GeneralSkill,
             RequiredBayType = BayType.Standard,
         });
+        builder.HasData(NorthgateDemoData.ServiceTypes);
     }
 }

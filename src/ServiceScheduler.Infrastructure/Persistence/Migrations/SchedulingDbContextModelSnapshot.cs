@@ -117,6 +117,27 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                             Email = "customer@example.com",
                             FullName = "Sample Customer",
                             Phone = "+00 000 000 000"
+                        },
+                        new
+                        {
+                            Id = new Guid("c0570000-0002-0000-0000-000000000001"),
+                            Email = "emma.clarke@example.com",
+                            FullName = "Emma Clarke",
+                            Phone = "+44 20 7946 0101"
+                        },
+                        new
+                        {
+                            Id = new Guid("c0570000-0002-0000-0000-000000000002"),
+                            Email = "liam.patel@example.com",
+                            FullName = "Liam Patel",
+                            Phone = "+44 20 7946 0102"
+                        },
+                        new
+                        {
+                            Id = new Guid("c0570000-0002-0000-0000-000000000003"),
+                            Email = "sofia.rossi@example.com",
+                            FullName = "Sofia Rossi",
+                            Phone = "+44 20 7946 0103"
                         });
                 });
 
@@ -142,6 +163,11 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                         {
                             Id = new Guid("dea10000-0000-0000-0000-000000000001"),
                             Name = "Riverside"
+                        },
+                        new
+                        {
+                            Id = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            Name = "Northgate"
                         });
                 });
 
@@ -173,6 +199,41 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                         {
                             DealershipId = new Guid("dea10000-0000-0000-0000-000000000001"),
                             DayOfWeek = (short)2,
+                            ClosesAt = new TimeOnly(17, 0, 0),
+                            OpensAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)1,
+                            ClosesAt = new TimeOnly(17, 0, 0),
+                            OpensAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)2,
+                            ClosesAt = new TimeOnly(17, 0, 0),
+                            OpensAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)3,
+                            ClosesAt = new TimeOnly(17, 0, 0),
+                            OpensAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)4,
+                            ClosesAt = new TimeOnly(17, 0, 0),
+                            OpensAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)5,
                             ClosesAt = new TimeOnly(17, 0, 0),
                             OpensAt = new TimeOnly(8, 0, 0)
                         });
@@ -222,6 +283,38 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                             DealershipId = new Guid("dea10000-0000-0000-0000-000000000001"),
                             IsActive = true,
                             Name = "Bay-1"
+                        },
+                        new
+                        {
+                            Id = new Guid("ba900000-0002-0000-0000-000000000001"),
+                            BayType = "Standard",
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Bay-A"
+                        },
+                        new
+                        {
+                            Id = new Guid("ba900000-0002-0000-0000-000000000002"),
+                            BayType = "Standard",
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Bay-B"
+                        },
+                        new
+                        {
+                            Id = new Guid("ba900000-0002-0000-0000-000000000003"),
+                            BayType = "EV",
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Bay-EV"
+                        },
+                        new
+                        {
+                            Id = new Guid("ba900000-0002-0000-0000-000000000004"),
+                            BayType = "Alignment",
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Bay-Align"
                         });
                 });
 
@@ -278,6 +371,26 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                             Name = "Oil change",
                             RequiredBayType = "Standard",
                             RequiredSkill = "General"
+                        },
+                        new
+                        {
+                            Id = new Guid("5e7c0000-0002-0000-0000-000000000001"),
+                            BufferMinutes = 0,
+                            Code = "ev-battery-check",
+                            DurationMinutes = 90,
+                            Name = "EV battery check",
+                            RequiredBayType = "EV",
+                            RequiredSkill = "EV"
+                        },
+                        new
+                        {
+                            Id = new Guid("5e7c0000-0002-0000-0000-000000000002"),
+                            BufferMinutes = 0,
+                            Code = "wheel-alignment",
+                            DurationMinutes = 60,
+                            Name = "Wheel alignment",
+                            RequiredBayType = "Alignment",
+                            RequiredSkill = "Alignment"
                         });
                 });
 
@@ -319,6 +432,27 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                             DealershipId = new Guid("dea10000-0000-0000-0000-000000000001"),
                             IsActive = true,
                             Name = "Alice"
+                        },
+                        new
+                        {
+                            Id = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Ben"
+                        },
+                        new
+                        {
+                            Id = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Chloe"
+                        },
+                        new
+                        {
+                            Id = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            DealershipId = new Guid("dea10000-0002-0000-0000-000000000001"),
+                            IsActive = true,
+                            Name = "Dan"
                         });
                 });
 
@@ -352,6 +486,111 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                             DayOfWeek = (short)2,
                             EndsAt = new TimeOnly(17, 0, 0),
                             StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)1,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)2,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)3,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)4,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            DayOfWeek = (short)5,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            DayOfWeek = (short)1,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            DayOfWeek = (short)2,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            DayOfWeek = (short)3,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            DayOfWeek = (short)4,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            DayOfWeek = (short)5,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(8, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            DayOfWeek = (short)1,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(12, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            DayOfWeek = (short)2,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(12, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            DayOfWeek = (short)3,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(12, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            DayOfWeek = (short)4,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(12, 0, 0)
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            DayOfWeek = (short)5,
+                            EndsAt = new TimeOnly(17, 0, 0),
+                            StartsAt = new TimeOnly(12, 0, 0)
                         });
                 });
 
@@ -375,6 +614,31 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                         {
                             TechnicianId = new Guid("7ec40000-0000-0000-0000-000000000001"),
                             Skill = "General"
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000001"),
+                            Skill = "General"
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            Skill = "General"
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000002"),
+                            Skill = "EV"
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            Skill = "General"
+                        },
+                        new
+                        {
+                            TechnicianId = new Guid("7ec40000-0002-0000-0000-000000000003"),
+                            Skill = "Alignment"
                         });
                 });
 
@@ -425,6 +689,42 @@ namespace ServiceScheduler.Infrastructure.Persistence.Migrations
                             Model = "Civic",
                             ModelYear = (short)2021,
                             Vin = "1HGBH41JXMN109186"
+                        },
+                        new
+                        {
+                            Id = new Guid("ca700000-0002-0000-0000-000000000001"),
+                            CustomerId = new Guid("c0570000-0002-0000-0000-000000000001"),
+                            Make = "Ford",
+                            Model = "Focus",
+                            ModelYear = (short)2020,
+                            Vin = "WF0NXXGCHNLA12345"
+                        },
+                        new
+                        {
+                            Id = new Guid("ca700000-0002-0000-0000-000000000002"),
+                            CustomerId = new Guid("c0570000-0002-0000-0000-000000000002"),
+                            Make = "Toyota",
+                            Model = "Corolla",
+                            ModelYear = (short)2022,
+                            Vin = "SB1K93BE10E123456"
+                        },
+                        new
+                        {
+                            Id = new Guid("ca700000-0002-0000-0000-000000000003"),
+                            CustomerId = new Guid("c0570000-0002-0000-0000-000000000003"),
+                            Make = "Volkswagen",
+                            Model = "Golf",
+                            ModelYear = (short)2019,
+                            Vin = "WVWZZZAUZKW123456"
+                        },
+                        new
+                        {
+                            Id = new Guid("ca700000-0002-0000-0000-000000000004"),
+                            CustomerId = new Guid("c0570000-0002-0000-0000-000000000003"),
+                            Make = "Nissan",
+                            Model = "Leaf",
+                            ModelYear = (short)2023,
+                            Vin = "SJNFAAZE1U0123456"
                         });
                 });
 
