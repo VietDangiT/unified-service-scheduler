@@ -17,6 +17,7 @@ builder.Host.UseDefaultServiceProvider(options =>
 string connectionString = builder.Configuration.GetConnectionString("Scheduling")
     ?? throw new InvalidOperationException("The connection string 'ConnectionStrings:Scheduling' is not configured.");
 
+builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.Configure<ExceptionHandlerOptions>(options =>
@@ -41,6 +42,9 @@ app.UseExceptionHandler();
 
 // An error response without a body (a binding failure's 400) still gets a ProblemDetails body with a traceId.
 app.UseStatusCodePages();
+
+// The contract that represents the client layer (system design section 9), served at /openapi/v1.json.
+app.MapOpenApi();
 
 app.MapGroup("/api").MapAppointmentEndpoints();
 
