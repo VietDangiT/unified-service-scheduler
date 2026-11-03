@@ -36,7 +36,7 @@ paths:
 
 | Race | Guard |
 |---|---|
-| Two bookings for the same technician/bay/vehicle and time | PostgreSQL exclusion constraint (`EXCLUDE USING gist ... WITH &&`). Violation `23P01` is translated to a domain error, then allocation retries with the next candidate |
+| Two bookings for the same technician/bay/vehicle and time | PostgreSQL exclusion constraint (`EXCLUDE USING gist ... WITH &&`). Violation `23P01` is translated to a domain error, then allocation retries with the next candidate. To keep conflicting inserts from deadlocking (`40P01`) in that check, the insert's transaction first locks the technician row, then the bay row, always in that order; the constraint stays the decision |
 | Client retries a POST after a timeout | `Idempotency-Key` with a unique index on the key |
 | Two writers changing the same appointment (e.g. two cancels) | Atomic conditional update (`WHERE status = 'Confirmed'`); 0 rows affected → reload and decide. `xmin` row version when an aggregate is loaded, modified and saved |
 | Commit succeeded but the acknowledgement was lost; the retry runs again | App-generated ID; check whether the row exists before reporting a conflict |
@@ -47,5 +47,5 @@ Never "fix" a race with `lock`, `SemaphoreSlim`, a `static` flag, `Thread.Sleep`
 ## Time
 
 Inject `TimeProvider`; never call `DateTime.Now`, `DateTime.UtcNow` or `DateTimeOffset.Now` directly.
-Tests use `FakeTimeProvider`. The Domain stays pure: domain methods take `DateTimeOffset now` as a
-parameter, and Application supplies `timeProvider.GetUtcNow()`; domain tests pass fixed instants.
+Tests use a small fixed `TimeProvider` subclass. The Domain stays pure: domain methods take `DateTime now` as a
+parameter, and Application supplies `timeProvider.GetLocalNow().DateTime`; domain tests pass fixed times.

@@ -18,7 +18,11 @@
       "PowerShell(dotnet format *)",
       "PowerShell(git status *)",
       "PowerShell(git diff *)",
-      "PowerShell(git log *)"
+      "PowerShell(git log *)",
+      "Bash(pwsh tools/mutation/mutate.ps1*)",
+      "Bash(pwsh -NoProfile -File tools/mutation/mutate.ps1*)",
+      "PowerShell(pwsh tools/mutation/mutate.ps1*)",
+      "PowerShell(pwsh -NoProfile -File tools/mutation/mutate.ps1*)"
     ],
     "deny": [
       "Read(./.env)",

@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.git
+.vs/
+**/TestResults/
+.claude/
+docs/
+tests/
+tools/
+.env
+**/secrets.json
+**/appsettings.*.local.json

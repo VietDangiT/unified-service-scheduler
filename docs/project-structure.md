@@ -43,7 +43,7 @@ unified-service-scheduler/
     ├── settings.json             Permissions and hooks
     ├── rules/                    Engineering standards, loaded by folder
     ├── commands/                 Slash commands: /verify, /tdd, /ai-log
-    ├── agents/                   Review subagents: domain-analyst, code-reviewer, test-auditor
+    ├── agents/                   Subagents: implementer, domain-analyst, code-reviewer, test-auditor
     └── hooks/                    Scripts that run automatically on AI actions
 ```
 
@@ -144,7 +144,7 @@ Loaded into every session, so it is kept short. It contains:
 - What the service does, with links to the design docs
 - Build, test and format commands
 - The four layers and the dependency rule
-- **Four invariants:** no double-booking, the whole duration must fit, UTC time, cancelled appointments free their slot
+- **Four invariants:** no double-booking, the whole duration must fit, one clock, cancelled appointments free their slot
 - An index of the rule files
 - **Working agreement:** plan first, test first, `/verify` before claiming done, ask before adding packages or changing the API
 
@@ -155,7 +155,7 @@ Each file starts with a `paths:` header listing the folders it applies to.
 | Rule file | Loads for | Key content |
 |---|---|---|
 | `architecture.md` | `src/**` | Layer responsibilities; DDD aggregates, value objects, domain service; why cross-aggregate overlap is enforced by the database; one handler per use case; no MediatR/AutoMapper |
-| `booking-domain.md` | Domain, Application, tests | The business rules: validation and error names, technician/bay eligibility, half-open overlap, validation order, service vs buffer intervals, allocation policy (best-fit bay and technician, 3 retries, 7-day alternatives), cancellation, time zones and DST, idempotency, out-of-scope list |
+| `booking-domain.md` | Domain, Application, tests | The business rules: validation and error names, technician/bay eligibility, half-open overlap, validation order, service vs buffer intervals, allocation policy (best-fit bay and technician, 3 retries, 7-day alternatives), cancellation, idempotency, out-of-scope list |
 | `csharp-design.md` | All `.cs` files | SOLID applied pragmatically, DRY with the rule of three, the allowed patterns (Result, Strategy, Repository, Factory, Options), immutability, nullability, naming |
 | `async-concurrency.md` | `src/**/*.cs`, integration tests | No blocking on async, cancellation tokens everywhere, `DbContext` is not thread-safe, DI lifetimes, a table of race conditions and their guards, `TimeProvider` |
 | `persistence.md` | Infrastructure, integration tests | Avoiding N+1, `AsNoTracking`, projections, bounded queries, connection pooling, short transactions, exclusion constraints, `23P01` translation, migration rules, parameterised SQL |
@@ -173,12 +173,15 @@ Each file starts with a `paths:` header listing the folders it applies to.
 
 ### `.claude/agents/`
 
-All agents review and report; none edits files. Together they answer three different questions:
+The main session acts as **orchestrator** (see `CLAUDE.md › Agent team and orchestration`): it writes
+work packages, delegates, checks results and holds the developer approvals. Only `implementer` edits
+code; the other agents review and report. The reviewers answer three different questions:
 *what should be tested* (domain-analyst), *is the new code correct* (code-reviewer) and *would the
 tests catch a broken rule* (test-auditor, backed by mutation testing).
 
 | Agent | Use it | Checks |
 |---|---|---|
+| `implementer` | Given one approved work package by the orchestrator (the main session) | The only agent that edits code: writes the failing tests (red) and stops to report, then implements (green) with approved tests frozen, adds the packaged mutations and runs the quality gate; a `fix` phase handles review findings. Never decides business rules, never edits rules/ADRs/design docs, never changes git state |
 | `domain-analyst` | At the start of each step, before writing tests | Thinks like a service advisor and workshop manager: derives Given/When/Then business scenarios (boundaries, real counter situations, rule combinations), separates agreed outcomes from open questions, and checks tests read as business rules |
 | `code-reviewer` | After a feature, before committing | Booking invariants → concurrency → data access (N+1) → async → layering → error handling → missing tests. Each finding has severity, `file:line`, a failure scenario and a fix |
 | `test-auditor` | After a batch of tests | Maps every row of `edge-cases.md` to real tests and asks "would this test fail if the rule were broken?" Reports covered / weak / missing |
@@ -211,7 +214,7 @@ Review them anytime with the `/hooks` command.
 4. After approval the AI implements the rule in Domain; the formatting hook tidies each edited file.
 5. `/verify` runs build, tests and format checks.
 6. The `code-reviewer` agent reviews the diff; findings are fixed or rejected with a reason.
-7. `edge-cases.md` gets the test name; a notable moment (e.g. the AI's first version missed DST) goes into `/ai-log`.
+7. `edge-cases.md` gets the test name; a notable moment (e.g. a defect in generated code) goes into `/ai-log`.
 
 ---
 

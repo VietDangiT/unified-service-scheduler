@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using ServiceScheduler.Domain.Common;
+using ServiceScheduler.Domain.Dealerships;
 using ServiceScheduler.Domain.Scheduling;
 using ServiceScheduler.UnitTests.Builders;
 
@@ -8,17 +9,12 @@ namespace ServiceScheduler.UnitTests.Domain.Scheduling;
 
 public sealed class BookingValidatorTests
 {
-    // November 2026: London is on GMT, so local time equals UTC.
     private static readonly DateOnly Monday = new(2026, 11, 2);
     private static readonly DateOnly Tuesday = new(2026, 11, 3);
     private static readonly DateOnly Saturday = new(2026, 11, 7);
 
-    // The advisor is booking at 09:00 on Monday, London time.
-    private static readonly DateTimeOffset Now = BookingRequestBuilder.Local(Monday, "09:00");
-
-    // July 2027: London is on British Summer Time (UTC+1).
-    private static readonly DateOnly SummerTuesday = new(2027, 7, 6);
-    private static readonly DateTimeOffset SummerNow = BookingRequestBuilder.Local(new DateOnly(2027, 7, 1), "09:00");
+    // The advisor is booking at 09:00 on Monday.
+    private static readonly DateTime Now = BookingRequestBuilder.TimeOn(Monday, "09:00");
 
     [Fact]
     public void Validate_WhenRequestIsValid_ReturnsServiceSlot()
@@ -28,34 +24,29 @@ public sealed class BookingValidatorTests
         var result = BookingValidator.Validate(request, Now);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(BookingRequestBuilder.Local(Tuesday, "10:00"), result.Value.StartUtc);
-        Assert.Equal(BookingRequestBuilder.Local(Tuesday, "11:00"), result.Value.EndUtc);
+        Assert.Equal(BookingRequestBuilder.TimeOn(Tuesday, "10:00"), result.Value.Start);
+        Assert.Equal(BookingRequestBuilder.TimeOn(Tuesday, "11:00"), result.Value.End);
     }
 
     // Accepted bookings vary along every dimension the rules care about, so a rule that is too strict
-    // (rejects same-day work, hourly-only grid, Saturday treated as closed, UTC dates) loses real business.
+    // (rejects same-day work, hourly-only grid, Saturday treated as closed) loses real business.
     // Riverside hours: Mon-Fri 08:00-18:00, Sat 09:00-13:00 (DealershipBuilder default). 60-minute service.
     [Theory]
-    [InlineData("2026-11-02T09:15:00+00:00", "Europe/London")] // EC-58 walk-in: today, 15 min from now
-    [InlineData("2026-11-02T14:00:00+00:00", "Europe/London")] // EC-58 later today
-    [InlineData("2026-11-03T10:15:00+00:00", "Europe/London")] // EC-59 quarter past
-    [InlineData("2026-11-03T10:30:00+00:00", "Europe/London")] // EC-59 half past
-    [InlineData("2026-11-03T10:45:00+00:00", "Europe/London")] // EC-59 quarter to
-    [InlineData("2026-11-07T12:00:00+00:00", "Europe/London")] // EC-60 Saturday, ends at 13:00 closing
-    [InlineData("2026-11-10T12:30:00+13:00", "Pacific/Auckland")] // EC-61 Tue 12:30-13:30 local crosses UTC midnight
-    [InlineData("2026-11-03T09:00:00+01:00", "Europe/London")] // EC-11 typed in another offset: 08:00 London
-    public void Validate_WhenBookingFollowsEveryRule_IsAccepted(string start, string timeZone)
+    [InlineData("2026-11-02T09:15:00")] // EC-58 walk-in: today, 15 min from now
+    [InlineData("2026-11-02T14:00:00")] // EC-58 later today
+    [InlineData("2026-11-03T10:15:00")] // EC-59 quarter past
+    [InlineData("2026-11-03T10:30:00")] // EC-59 half past
+    [InlineData("2026-11-03T10:45:00")] // EC-59 quarter to
+    [InlineData("2026-11-07T12:00:00")] // EC-60 Saturday, ends at 13:00 closing
+    public void Validate_WhenBookingFollowsEveryRule_IsAccepted(string start)
     {
-        var requestedStart = Instant(start);
-        var request = BookingRequestBuilder.Default()
-            .AtDealership(DealershipBuilder.Default().InTimeZone(timeZone).Build())
-            .At(requestedStart)
-            .Build();
+        var requestedStart = DateTime.Parse(start, CultureInfo.InvariantCulture);
+        var request = BookingRequestBuilder.Default().At(requestedStart).Build();
 
         var result = BookingValidator.Validate(request, Now);
 
         Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
-        Assert.Equal(requestedStart, result.Value.StartUtc);
+        Assert.Equal(requestedStart, result.Value.Start);
     }
 
     // EC-20
@@ -73,21 +64,9 @@ public sealed class BookingValidatorTests
     [Theory]
     [InlineData("08:00")]
     [InlineData("09:00")]
-    public void Validate_WhenStartIsNowOrEarlier_ReturnsStartInPast(string localStart)
+    public void Validate_WhenStartIsNowOrEarlier_ReturnsStartInPast(string start)
     {
-        var request = BookingRequestBuilder.Default().At(Monday, localStart).Build();
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.StartInPast, result);
-    }
-
-    // EC-09: "past" is about the instant, not the clock time typed in. Auckland Monday 09:30 is
-    // Sunday 20:30 UTC, hours before the advisor's Monday 09:00 London.
-    [Fact]
-    public void Validate_WhenAucklandMorningIsAlreadyOverInLondon_ReturnsStartInPast()
-    {
-        var request = Auckland().At(Instant("2026-11-02T09:30:00+13:00")).Build();
+        var request = BookingRequestBuilder.Default().At(Monday, start).Build();
 
         var result = BookingValidator.Validate(request, Now);
 
@@ -99,9 +78,9 @@ public sealed class BookingValidatorTests
     [InlineData("10:05")]
     [InlineData("10:10")]
     [InlineData("10:50")]
-    public void Validate_WhenStartIsBetweenQuarterHours_ReturnsStartNotOnGrid(string localStart)
+    public void Validate_WhenStartIsBetweenQuarterHours_ReturnsStartNotOnGrid(string start)
     {
-        var request = BookingRequestBuilder.Default().At(Tuesday, localStart).Build();
+        var request = BookingRequestBuilder.Default().At(Tuesday, start).Build();
 
         var result = BookingValidator.Validate(request, Now);
 
@@ -114,19 +93,8 @@ public sealed class BookingValidatorTests
     [InlineData(1)] // 10:00:00.001
     public void Validate_WhenStartHasSecondsOrMilliseconds_ReturnsStartNotOnGrid(int milliseconds)
     {
-        var start = BookingRequestBuilder.Local(Tuesday, "10:00").AddMilliseconds(milliseconds);
+        var start = BookingRequestBuilder.TimeOn(Tuesday, "10:00").AddMilliseconds(milliseconds);
         var request = BookingRequestBuilder.Default().At(start).Build();
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.StartNotOnGrid, result);
-    }
-
-    // EC-10: the grid is the dealership's clock, not the clock in the request. 10:00+00:10 is 09:50 in London.
-    [Fact]
-    public void Validate_WhenRequestOffsetHidesAnOffGridLocalTime_ReturnsStartNotOnGrid()
-    {
-        var request = BookingRequestBuilder.Default().At(Instant("2026-11-03T10:00:00+00:10")).Build();
 
         var result = BookingValidator.Validate(request, Now);
 
@@ -138,9 +106,9 @@ public sealed class BookingValidatorTests
     [InlineData("17:30", 60)] // ends 18:30, after closing
     [InlineData("07:45", 60)] // starts before opening
     [InlineData("08:00", 615)] // longer than the whole opening day
-    public void Validate_WhenServiceDoesNotFitOpeningHours_ReturnsOutsideOpeningHours(string localStart, int minutes)
+    public void Validate_WhenServiceDoesNotFitOpeningHours_ReturnsOutsideOpeningHours(string start, int minutes)
     {
-        var request = OpenOnTuesday("08:00", "18:00").At(Tuesday, localStart).WithDuration(minutes).Build();
+        var request = OpenOnTuesday("08:00", "18:00").At(Tuesday, start).WithDuration(minutes).Build();
 
         var result = BookingValidator.Validate(request, Now);
 
@@ -151,9 +119,9 @@ public sealed class BookingValidatorTests
     [Theory]
     [InlineData("08:00", 60)]
     [InlineData("17:00", 60)]
-    public void Validate_WhenServiceTouchesOpeningOrClosingTime_IsAccepted(string localStart, int minutes)
+    public void Validate_WhenServiceTouchesOpeningOrClosingTime_IsAccepted(string start, int minutes)
     {
-        var request = OpenOnTuesday("08:00", "18:00").At(Tuesday, localStart).WithDuration(minutes).Build();
+        var request = OpenOnTuesday("08:00", "18:00").At(Tuesday, start).WithDuration(minutes).Build();
 
         var result = BookingValidator.Validate(request, Now);
 
@@ -164,11 +132,11 @@ public sealed class BookingValidatorTests
     [Theory]
     [InlineData("08:30")] // weekday opening time, but Saturday opens at 09:00
     [InlineData("12:30")] // ends 13:30, after Saturday's 13:00 closing
-    public void Validate_WhenSaturdayServiceIsOutsideSaturdayHours_ReturnsOutsideOpeningHours(string localStart)
+    public void Validate_WhenSaturdayServiceIsOutsideSaturdayHours_ReturnsOutsideOpeningHours(string start)
     {
         var request = BookingRequestBuilder.Default()
             .AtDealership(DealershipBuilder.Default().OpenOn(DayOfWeek.Saturday, "09:00", "13:00").Build())
-            .At(Saturday, localStart)
+            .At(Saturday, start)
             .Build();
 
         var result = BookingValidator.Validate(request, Now);
@@ -190,121 +158,188 @@ public sealed class BookingValidatorTests
         AssertFails(BookingErrors.OutsideOpeningHours, result);
     }
 
-    // Opening hours are local wall-clock times: in British Summer Time 08:00 local is 07:00 UTC,
-    // so comparing UTC times with opening hours would wrongly reject this booking.
+    // EC-22: rule 3 is a static capability check. An EV job needs an EV bay; a Standard and a Lift bay do not count.
     [Fact]
-    public void Validate_DuringSummerTime_AllowsStartAtLocalOpeningTime()
+    public void Validate_WhenDealershipHasNoBayOfTheRequiredType_ReturnsServiceNotOfferedAtDealership()
     {
-        var request = BookingRequestBuilder.Default().At(SummerTuesday, "08:00").Build();
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithSkills(Skills.General, Skills.EV).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.Lift).Build()));
 
-        var result = BookingValidator.Validate(request, SummerNow);
+        var result = BookingValidator.Validate(request, Now);
 
-        Assert.True(result.IsSuccess);
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-22: skills match exactly; a General-only technician cannot do an EV job.
+    [Fact]
+    public void Validate_WhenNoTechnicianHoldsTheRequiredSkill_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithSkills(Skills.General).Build())
+                .WithBays(ServiceBayBuilder.Default().OfType(BayType.EV).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-22: only active resources count.
+    [Fact]
+    public void Validate_WhenOnlyCompatibleBayIsInactive_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithSkills(Skills.General, Skills.EV).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.EV).Inactive().Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.Standard).Build()));
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
     }
 
     [Fact]
-    public void Validate_DuringSummerTime_RejectsStartBeforeLocalOpeningTime()
+    public void Validate_WhenOnlySkilledTechnicianIsInactive_ReturnsServiceNotOfferedAtDealership()
     {
-        var request = BookingRequestBuilder.Default().At(SummerTuesday, "07:45").Build();
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(
+                    TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General, Skills.EV).Inactive().Build(),
+                    TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General).Build())
+                .WithBays(ServiceBayBuilder.Default().OfType(BayType.EV).Build()));
 
-        var result = BookingValidator.Validate(request, SummerNow);
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-22: no resources of the kind at all.
+    [Fact]
+    public void Validate_WhenDealershipHasNoBays_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().WithoutBays().Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    [Fact]
+    public void Validate_WhenDealershipHasNoTechnicians_ReturnsServiceNotOfferedAtDealership()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default().WithoutTechnicians().Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        AssertFails(BookingErrors.ServiceNotOfferedAtDealership, result);
+    }
+
+    // EC-62: a Standard job can use any bay type (ADR-0002 #9), so Lift and EV bays make it offered.
+    [Fact]
+    public void Validate_WhenStandardJobAndOnlyLiftAndEvBaysExist_IsAccepted()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Lift).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.EV).Build())
+                .Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
+    }
+
+    // EC-69: rule 3 counts active technicians with the skill; shifts are not considered (ADR-0002 #19).
+    [Fact]
+    public void Validate_WhenSkilledTechnicianHasNoShifts_IsAccepted()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .WithTechnicians(TechnicianBuilder.Default().WithNoShifts().Build())
+                .Build())
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
+
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
+    }
+
+    // EC-24: a shift that starts before opening does not extend the bookable window.
+    [Fact]
+    public void Validate_WhenBookingIsBeforeOpeningButInsideTechniciansShift_ReturnsOutsideOpeningHours()
+    {
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .OpenOn(DayOfWeek.Tuesday, "08:00", "18:00")
+                .WithTechnicians(TechnicianBuilder.Default().OnShift(DayOfWeek.Tuesday, "07:00", "19:00").Build())
+                .Build())
+            .At(Tuesday, "07:30")
+            .Build();
+
+        var result = BookingValidator.Validate(request, Now);
 
         AssertFails(BookingErrors.OutsideOpeningHours, result);
     }
 
-    // EC-11: what counts is the instant, not the clock time typed in. In July 07:30 UTC is 08:30 in London
-    // (open) and 17:30 UTC is 18:30 (closed). Uses SummerNow so the request stays inside the booking horizon.
+    // EC-71: specialised jobs are offered when the dealership has the matching technician and bay (ADR-0002 #9),
+    // even when a generalist and a Standard bay are listed first.
     [Fact]
-    public void Validate_WhenSummerRequestIsTypedInUtc_IsAcceptedAtLocalTime()
+    public void Validate_WhenEvJobAtDealershipWithMixedStaffAndBays_IsAccepted()
     {
-        var request = BookingRequestBuilder.Default().At(Instant("2027-07-06T07:30:00+00:00")).Build();
+        var request = EvCheckAt(
+            DealershipBuilder.Default()
+                .WithTechnicians(
+                    TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build(),
+                    TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General, Skills.EV).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.EV).Build()));
 
-        var result = BookingValidator.Validate(request, SummerNow);
+        var result = BookingValidator.Validate(request, Now);
 
         Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
     }
 
     [Fact]
-    public void Validate_WhenUtcTimeIsAfterClosingInLocalSummerTime_ReturnsOutsideOpeningHours()
+    public void Validate_WhenAlignmentJobAtDealershipWithMixedStaffAndBays_IsAccepted()
     {
-        var request = BookingRequestBuilder.Default().At(Instant("2027-07-06T17:30:00+00:00")).Build();
-
-        var result = BookingValidator.Validate(request, SummerNow);
-
-        AssertFails(BookingErrors.OutsideOpeningHours, result);
-    }
-
-    // Auckland is UTC+13 in November, so its weekday differs from the UTC weekday every morning.
-    [Fact]
-    public void Validate_AucklandMondayMorning_IsBookable()
-    {
-        var request = Auckland().At(Instant("2026-11-09T09:00:00+13:00")).Build(); // Sunday 20:00 UTC
+        var request = BookingRequestBuilder.Default()
+            .AtDealership(DealershipBuilder.Default()
+                .WithTechnicians(
+                    TechnicianBuilder.Default().WithId(1).WithSkills(Skills.General).Build(),
+                    TechnicianBuilder.Default().WithId(2).WithSkills(Skills.General, Skills.Alignment).Build())
+                .WithBays(
+                    ServiceBayBuilder.Default().WithId(1).OfType(BayType.Standard).Build(),
+                    ServiceBayBuilder.Default().WithId(2).OfType(BayType.Alignment).Build())
+                .Build())
+            .WithServiceType(ServiceTypeBuilder.WheelAlignment().Build())
+            .Build();
 
         var result = BookingValidator.Validate(request, Now);
 
-        Assert.True(result.IsSuccess);
+        Assert.True(result.IsSuccess, $"Rejected with {result.Error?.Code}");
     }
 
-    [Fact]
-    public void Validate_AucklandSundayMorning_IsClosed()
-    {
-        var request = Auckland().At(Instant("2026-11-08T10:00:00+13:00")).Build(); // Saturday 21:00 UTC
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.OutsideOpeningHours, result);
-    }
-
-    // A job running past local midnight cannot fit a single day's hours, even when its UTC dates match
-    // (Auckland Tue 23:30-00:30 local is Tue 10:30-11:30 UTC).
-    [Fact]
-    public void Validate_WhenAucklandServiceRunsPastLocalMidnight_ReturnsOutsideOpeningHours()
-    {
-        var request = Auckland().At(Instant("2026-11-10T23:30:00+13:00")).Build();
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.OutsideOpeningHours, result);
-    }
-
-    // EC-34: rules are checked in a fixed order, so the first failing rule wins.
-    [Fact]
-    public void Validate_WhenStartIsInPastAndOffGrid_ReturnsStartInPast()
-    {
-        var request = BookingRequestBuilder.Default().At(Monday, "08:10").Build();
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.StartInPast, result);
-    }
-
-    [Fact]
-    public void Validate_WhenVehicleNotOwnedAndStartInPast_ReturnsVehicleNotOwnedByCustomer()
-    {
-        var request = BookingRequestBuilder.Default().WithVehicleOwnedByAnotherCustomer().At(Monday, "08:00").Build();
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.VehicleNotOwnedByCustomer, result);
-    }
-
-    [Fact]
-    public void Validate_WhenStartIsOffGridAndBeforeOpening_ReturnsStartNotOnGrid()
-    {
-        var request = BookingRequestBuilder.Default().At(Tuesday, "07:50").Build();
-
-        var result = BookingValidator.Validate(request, Now);
-
-        AssertFails(BookingErrors.StartNotOnGrid, result);
-    }
-
-    private static BookingRequestBuilder Auckland() =>
-        BookingRequestBuilder.Default().AtDealership(DealershipBuilder.Default().InTimeZone("Pacific/Auckland").Build());
+    private static BookingRequest EvCheckAt(DealershipBuilder dealership) =>
+        BookingRequestBuilder.Default()
+            .AtDealership(dealership.Build())
+            .WithServiceType(ServiceTypeBuilder.EvCheck().Build())
+            .Build();
 
     private static BookingRequestBuilder OpenOnTuesday(string opens, string closes) =>
         BookingRequestBuilder.Default().AtDealership(DealershipBuilder.Default().OpenOn(DayOfWeek.Tuesday, opens, closes).Build());
-
-    private static DateTimeOffset Instant(string iso) => DateTimeOffset.Parse(iso, CultureInfo.InvariantCulture);
 
     private static void AssertFails<T>(DomainError expected, Result<T> result)
     {
