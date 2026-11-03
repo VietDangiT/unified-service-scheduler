@@ -61,6 +61,7 @@ What the integration tests prove:
 |---|---|
 | `PostAppointmentTests` | Requirement 2: a busy technician or bay is refused with `409`, and back-to-back bookings are accepted |
 | `BookingRaceTests` | 20 parallel requests for the last slot: exactly one `201`, nineteen `409`, no `500`, one row stored |
+| `AnotherFreeResourceTests` | With a second technician and bay, the busy pair is skipped and the free pair is booked through the real busy-interval query. Every other `409` could also come from the database constraint |
 | `BayRaceTests` | A race lost on the bay is reported as `NoCompatibleBayAvailable` |
 | `LockOrderRaceTests` | Each lock taken before the insert is needed. Without it, concurrent saves deadlock and fail with `500` |
 | `BookingLogTests` | Bookings and rejections are logged as business events with no personal data. An unexpected error is a generic `500`, logged once |
@@ -69,7 +70,7 @@ What the integration tests prove:
 
 | Method and route | Success | Expected failures |
 |---|---|---|
-| `POST /api/appointments` | `201 Created` + `Location` | `400` malformed body, `404` unknown reference, `409` no technician or bay free, `422` business validation (vehicle not the customer's, past, outside opening hours, off the 15-minute grid, beyond the horizon, service not offered) |
+| `POST /api/appointments` | `201 Created` + `Location` | `400` malformed body, `404` unknown reference, `409` no technician or bay free, `422` business validation (vehicle not the customer's, past, outside opening hours, off the 15-minute grid, service not offered) |
 
 Errors are RFC 9457 `application/problem+json` with a stable `code`.
 

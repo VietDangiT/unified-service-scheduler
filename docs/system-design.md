@@ -85,7 +85,7 @@ Full rationale in [ADR-0002](adr/0002-scope-and-business-assumptions.md).
 | Never possible | No compatible bay or no skilled technician at the dealership at all → `422 ServiceNotOfferedAtDealership` |
 | Duration | Service duration from the service type, plus an optional buffer (default 0). The **service** must fit opening hours and the shift; the **buffer** may run past closing and blocks only technician and bay. Both times stored at booking time |
 | Granularity | Start times on a **15-minute grid** of the clock |
-| Horizon | Bookings up to **90 days** ahead |
+| Horizon | Bookings up to **90 days** ahead (rule 5, parked: not built yet) |
 | Calendars | One opening range per weekday per dealership; one shift range per weekday per technician; no leave, holidays, split shifts or breaks |
 | Bay compatibility | A `Standard` job can use any bay; `Lift`, `EV` and `Alignment` jobs need that bay type |
 | Lifecycle | `Confirmed → Cancelled` only; cancel is idempotent and refused once the appointment has started |
@@ -740,7 +740,7 @@ sequenceDiagram
         H-->>EP: NotFound
         EP-->>Advisor: 404 ProblemDetails (stop)
     end
-    H->>H: Validate in order: vehicle owner, service offered, past, horizon, grid, opening hours
+    H->>H: Validate in order: vehicle owner, service offered, past, horizon (parked), grid, opening hours
     H->>RD: GetBusyIntervalsAsync(dealership, vehicle, window)
     RD->>DB: Busy intervals of candidates (this dealership) and of the vehicle (all dealerships)
     H->>H: Vehicle free for the service interval? Otherwise VehicleAlreadyBooked
@@ -841,7 +841,7 @@ sequenceDiagram
 
     Advisor->>EP: GET /api/dealerships/{id}/availability?serviceTypeId&date
     EP->>H: HandleAsync(query, ct)
-    H->>H: date not in the past, within the horizon (else 422)
+    H->>H: date not in the past, within the horizon (parked) (else 422)
     H->>RD: Opening hours, qualified technicians, compatible bays
     RD->>DB: Reference data (AsNoTracking)
     H->>RD: Busy intervals for that dealership-day
@@ -941,7 +941,7 @@ Content-Type: application/json
 |---|---|---|
 | Shape errors (missing field, bad `Idempotency-Key`) | 400 | Fix the request |
 | `NotFound` | 404 | Wrong ID |
-| `VehicleNotOwnedByCustomer`, `ServiceNotOfferedAtDealership`, `StartInPast`, `BeyondBookingHorizon`, `StartNotOnGrid`, `OutsideOpeningHours`, `IdempotencyKeyReused` | 422 | This request can never succeed as sent |
+| `VehicleNotOwnedByCustomer`, `ServiceNotOfferedAtDealership`, `StartInPast`, `BeyondBookingHorizon` (parked), `StartNotOnGrid`, `OutsideOpeningHours`, `IdempotencyKeyReused` | 422 | This request can never succeed as sent |
 | `NoQualifiedTechnicianAvailable`, `NoCompatibleBayAvailable`, `VehicleAlreadyBooked`, `AppointmentAlreadyStarted` | 409 | Conflicts with the current state; pick another time |
 
 ---

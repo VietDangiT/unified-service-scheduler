@@ -34,6 +34,7 @@ $D = "src\ServiceScheduler.Domain\Dealerships\Dealership.cs"
 $SB = "src\ServiceScheduler.Domain\Dealerships\ServiceBay.cs"
 $TC = "src\ServiceScheduler.Domain\Dealerships\Technician.cs"
 $BT = "src\ServiceScheduler.Domain\Dealerships\BayType.cs"
+$BE = "src\ServiceScheduler.Domain\Scheduling\BookingErrors.cs"
 
 $ownerBlock = "        if (request.Vehicle.OwnerId != request.CustomerId)`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.VehicleNotOwnedByCustomer);`n        }`n`n"
 $offeredBlock = "        if (!IsOffered(request.Dealership, request.ServiceType))`n        {`n            return Result.Failure<TimeSlot>(BookingErrors.ServiceNotOfferedAtDealership);`n        }`n`n"
@@ -78,6 +79,8 @@ $mutations = @(
     @{ Name = "Rule 3 rejects every non-Standard job";  File = $V; Old = "dealership.Technicians.Any("; New = "serviceType.RequiredBayType == BayType.Standard && dealership.Technicians.Any(" }
     @{ Name = "Rule 3 requires all technicians";        File = $V; Old = "dealership.Technicians.Any("; New = "dealership.Technicians.All(" }
     @{ Name = "Rule 3 requires all bays";               File = $V; Old = "dealership.Bays.Any("; New = "dealership.Bays.All(" }
+    # Error kinds decide the HTTP status (EC-84)
+    @{ Name = "ServiceNotOffered becomes a Conflict";   File = $BE; Old = "required skill.`",`n        ErrorKind.Validation"; New = "required skill.`",`n        ErrorKind.Conflict" }
 )
 
 $tests = Join-Path $Root "tests\ServiceScheduler.UnitTests"
