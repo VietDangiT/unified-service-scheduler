@@ -5,6 +5,9 @@ argument-hint: <behaviour, e.g. "back-to-back bookings do not conflict">
 
 Start a test-driven cycle for this behaviour: $ARGUMENTS
 
+This is the **solo path** (the main session writes the code). In the orchestrated flow, the
+`implementer` agent writes tests and code from an approved work package instead (see `CLAUDE.md`).
+
 1. Find the matching row in `docs/edge-cases.md` (add one if missing and tell me).
 2. Decide the right suite (unit vs integration) per `.claude/rules/testing.md` and explain why in one line.
 3. Write the smallest failing test that expresses the behaviour. Add production types only as far as

@@ -24,7 +24,7 @@ The dependency rule is enforced by project references. Never add a reference tha
   - `ServiceType`, `Customer`, `Vehicle`: small roots / reference data.
 - **Reference other aggregates by ID only** (`TechnicianId`, never a `Technician` navigation on `Appointment` in the domain model).
 - **Value objects** are immutable `record`/`readonly record struct` types with validation in the
-  factory: `TimeSlot` (half-open interval), `Vin`, `Skill`, `BayType`, `DealershipTimeZone`, strongly typed IDs.
+  factory: `TimeSlot` (half-open interval), `Vin`, `Skill`, strongly typed IDs. `BayType` is an enum, in specialisation order.
   No primitive obsession: a method taking `(Guid, Guid, DateTime, DateTime)` is a design smell.
 - **Domain service** for logic that spans aggregates: `SlotAllocator` decides which (bay, technician)
   pair to use. It is pure: inputs in, decision out.

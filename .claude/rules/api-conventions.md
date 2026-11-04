@@ -11,15 +11,17 @@ paths:
 | Method & route | Success | Expected failures |
 |---|---|---|
 | `POST /api/appointments` | `201 Created` + `Location` | `400` malformed body, `404` unknown reference, `409` no capacity / vehicle already booked, `422` business validation |
-| `GET /api/appointments/{id}` | `200` | `404` |
-| `POST /api/appointments/{id}/cancel` | `200` | `404`, `409` invalid state transition |
-| `GET /api/dealerships/{id}/availability?serviceTypeId=&date=` | `200` | `404`, `400` |
-| `GET /health/live`, `GET /health/ready` | `200` | `503` when dependencies are down |
+| `GET /api/appointments/{id}` | `200` | `404`  (target design, parked) |
+| `POST /api/appointments/{id}/cancel` | `200` | `404`, `409` invalid state transition  (target design, parked) |
+| `GET /api/dealerships/{id}/availability?serviceTypeId=&date=` | `200` | `404`, `400`  (target design, parked) |
+| `GET /health/live`, `GET /health/ready` | `200` | `503` when dependencies are down  (target design, parked) |
 
 - Plural nouns, kebab-case paths, camelCase JSON. Actions that are not CRUD use a sub-resource verb
   (`/cancel`), never a `PATCH` with a magic status value.
-- Timestamps in contracts are ISO-8601 with offset (`2026-11-03T09:00:00+00:00`); responses return UTC
-  plus the dealership's local time where useful for display.
+- Timestamps in contracts are ISO-8601 without an offset (`2026-11-03T09:00:00`): one clock, no time
+  zones (ADR-0002 #25).
+- The OpenAPI document (`/openapi/v1.json`) is mapped outside the `/api` group and in every environment, so a future
+  `RequireAuthorization()` on `/api` does not hide the contract.
 - Version the API from day one (`/api/...` maps to v1; breaking changes require a new version).
 
 ## Contracts

@@ -4,7 +4,7 @@
 |---|---|
 | **Scenario** | A: The Unified Service Scheduler (Ownership domain) |
 | **Implemented layer** | Backend (REST API + PostgreSQL). Client represented by an OpenAPI contract, a `.http` file and an optional thin demo page |
-| **Status** | v1.0. Assumptions in [ADR-0002](adr/0002-scope-and-business-assumptions.md) *Accepted* provisionally, to be revisited after testing; edge cases in the [catalogue](edge-cases.md) |
+| **Status** | v1.0. Assumptions in [ADR-0002](adr/0002-scope-and-business-assumptions.md) *Accepted* provisionally, to be revisited after testing; edge cases in the [catalogue](edge-cases.md). This document describes the target design; the build order and the parts parked until the core works (including availability, cancellation and idempotency) are in ADR-0002, *Delivery order* |
 
 **Contents**
 
@@ -33,13 +33,31 @@ Dealership service departments still book work by phone, paper and spreadsheets.
 double-booked bays, jobs given to technicians who are not certified for them, and idle capacity
 elsewhere in the day. Every lost workshop hour is lost revenue.
 
+### Users and personas
+
+| Persona | Role in this system |
+|---|---|
+| **Service Advisor** (primary) | Books appointments at a dealership on behalf of customers, by phone or at the counter. This replaces today's manual process |
+| **Vehicle owner** (future) | Books online for themselves. The booking core does not depend on the channel; only the API and authentication layer differs |
+| **Workshop Manager** (supporting) | Reads operational dashboards; does not book |
+
+**Out of scope:** managing resources (bays, technicians, opening hours) and technician job views. Seeded data is used instead.
+
+### User stories
+
+| # | As a Service Advisor, I want to… | So that… | Delivered by |
+|---|---|---|---|
+| US1 | Book a customer's vehicle at the time the customer asks for | I do not have to search bay and technician schedules myself | R1, R3, automatic allocation |
+| US2 | Know immediately when that time has no capacity | I can offer another time while still on the phone with the customer | R2, `409` with the reason. Alternatives (ADR-0002 #3) are parked: not in the brief (ADR-0002, *Delivery order*) |
+| US3 | Be sure a confirmed appointment cannot clash with anyone else's | The customer does not have to wait on arrival | Exclusion constraints ([ADR-0001](adr/0001-database-enforces-no-double-booking.md)) |
+
 ### Requirements (from the brief)
 
 | # | Requirement | How this design meets it |
 |---|---|---|
 | R1 | **Resource-constrained booking**: request an appointment for a vehicle, service type and dealership at a desired time | `POST /api/appointments` with `customerId`, `vehicleId`, `serviceTypeId`, `dealershipId`, `requestedStart` |
 | R2 | **Real-time availability check** of both a service bay **and** a qualified technician for the **entire** duration | Synchronous allocation at request time; whole-interval checks against shifts, opening hours and existing bookings; final guarantee by database exclusion constraints |
-| R3 | **Confirmed appointment record** associating customer, vehicle, technician and bay | `appointments` row with all four foreign keys, status `Confirmed`, stored UTC interval |
+| R3 | **Confirmed appointment record** associating customer, vehicle, technician and bay | `appointments` row with all four foreign keys, status `Confirmed`, stored start and end |
 
 ### Non-functional goals
 
@@ -51,7 +69,7 @@ elsewhere in the day. Every lost workshop hour is lost revenue.
 ### Out of scope
 
 Authentication, notifications, payments, rescheduling, multi-technician or multi-day jobs, technician
-leave, customer self-service portal. See [§14](#14-future-work) for how the design accommodates them.
+leave, customer self-service portal, resource management and technician job views. See [§14](#14-future-work) for how the design accommodates them.
 
 ---
 
@@ -65,13 +83,13 @@ Full rationale in [ADR-0002](adr/0002-scope-and-business-assumptions.md).
 | Allocation | The **system** picks technician and bay; the advisor does not. **Best fit** for both: least specialised bay, then technician with the fewest skills, then least loaded |
 | Unavailable time | `409` with the reason and the **earliest 3 free start times** after the requested one, up to **7 days** ahead |
 | Never possible | No compatible bay or no skilled technician at the dealership at all → `422 ServiceNotOfferedAtDealership` |
-| Duration | Service duration from the service type, plus an optional buffer (default 0). The **service** must fit opening hours and the shift; the **buffer** may run past closing and blocks only technician and bay. Both instants stored at booking time |
-| Granularity | Start times on a **15-minute grid** of the local wall clock |
-| Horizon | Bookings up to **90 days** ahead |
+| Duration | Service duration from the service type, plus an optional buffer (default 0). The **service** must fit opening hours and the shift; the **buffer** may run past closing and blocks only technician and bay. Both times stored at booking time |
+| Granularity | Start times on a **15-minute grid** of the clock |
+| Horizon | Bookings up to **90 days** ahead (rule 5, parked: not built yet) |
 | Calendars | One opening range per weekday per dealership; one shift range per weekday per technician; no leave, holidays, split shifts or breaks |
 | Bay compatibility | A `Standard` job can use any bay; `Lift`, `EV` and `Alignment` jobs need that bay type |
 | Lifecycle | `Confirmed → Cancelled` only; cancel is idempotent and refused once the appointment has started |
-| Time | Stored in UTC; opening hours and shifts evaluated in the dealership's IANA time zone; appointments do not span local midnight |
+| Time | One clock for everything: no time zones and no UTC conversion (ADR-0002 #25). The brief does not ask for them. Appointments do not span midnight |
 | Reference data | Customers, vehicles, dealerships, bays, technicians and service types are seeded locally; in production they would be synchronised from the Dealer Management System |
 
 ---
@@ -211,10 +229,10 @@ Covered by the class diagrams in [§5](#5-domain-model-class-diagrams).
 flowchart LR
     subgraph local["Local / review: docker compose"]
         apiC["scheduler-api<br/>[Docker container]"]
-        pgC[("postgres:16<br/>[Docker container]")]
-        aspC["aspire-dashboard<br/>[Docker container]"]
+        pgC[("postgres:16.15<br/>[Docker container]")]
+        aspC["aspire-dashboard<br/>[Docker container, planned with logging]"]
         apiC --> pgC
-        apiC --> aspC
+        apiC -.-> aspC
     end
     subgraph azure["Target production (illustrative): Azure"]
         aca["Azure Container Apps<br/>N x scheduler-api"]
@@ -266,12 +284,12 @@ classDiagram
         +TechnicianId TechnicianId
         +ServiceBayId ServiceBayId
         +TimeSlot Slot
-        +DateTimeOffset BlockedUntilUtc
+        +DateTime BlockedUntil
         +AppointmentStatus Status
         +IdempotencyKey? IdempotencyKey
-        +DateTimeOffset CreatedAtUtc
-        +DateTimeOffset? CancelledAtUtc
-        +Book(id, request, allocation, now)$ Result~Appointment~
+        +DateTime CreatedAt
+        +DateTime? CancelledAt
+        +Book(id, request, allocation, now)$ Appointment
         +Cancel(now) Result
     }
 
@@ -283,8 +301,8 @@ classDiagram
 
     class TimeSlot {
         <<Value Object>>
-        +DateTimeOffset StartUtc
-        +DateTimeOffset EndUtc
+        +DateTime Start
+        +DateTime End
         +Create(start, duration)$ TimeSlot
         +Overlaps(TimeSlot other) bool
         +IsAlignedTo(TimeSpan grid) bool
@@ -293,8 +311,6 @@ classDiagram
     class Dealership {
         <<Aggregate Root>>
         +DealershipId Id
-        +string Name
-        +TimeZoneInfo TimeZone
         +WeeklySchedule OpeningHours
         +IReadOnlyCollection~ServiceBay~ Bays
         +IReadOnlyCollection~Technician~ Technicians
@@ -304,7 +320,7 @@ classDiagram
     class ServiceBay {
         <<Entity>>
         +ServiceBayId Id
-        +string Name
+        +DealershipId DealershipId
         +BayType Type
         +bool IsActive
         +CanServe(BayType required) bool
@@ -313,18 +329,18 @@ classDiagram
     class Technician {
         <<Entity>>
         +TechnicianId Id
-        +string Name
+        +DealershipId DealershipId
         +IReadOnlySet~Skill~ Skills
         +WeeklySchedule Shifts
         +bool IsActive
         +IsQualifiedFor(Skill skill) bool
-        +IsOnShiftFor(TimeSlot slot, TimeZoneInfo zone) bool
+        +IsOnShiftFor(TimeSlot slot) bool
     }
 
     class WeeklySchedule {
         <<Value Object>>
-        +IReadOnlyDictionary~DayOfWeek, LocalTimeRange~ Days
-        +Covers(TimeSlot slot, TimeZoneInfo zone) bool
+        +IReadOnlyDictionary~DayOfWeek, TimeRange~ Days
+        +Covers(TimeSlot slot) bool
     }
 
     class ServiceType {
@@ -343,8 +359,8 @@ classDiagram
         <<enumeration>>
         Standard
         Lift
-        EV
         Alignment
+        EV
     }
 
     class Skill {
@@ -373,6 +389,7 @@ classDiagram
     class BestFitTechnicianPolicy {
         fewest skills, then least loaded, then ID
     }
+    note for BayType "Declared in specialisation order (ADR-0002 #18)"
 
     class Allocation {
         <<Value Object>>
@@ -417,7 +434,7 @@ Notes:
   `TimeSlot.Create` therefore throws on a non-positive duration: durations come from configured service
   types, so that is a programming error, not a business rejection.
 - `Slot` is the **service** interval (must fit opening hours and the shift; occupies the vehicle).
-  `BlockedUntilUtc` adds the buffer (occupies the technician and bay).
+  `BlockedUntil` adds the buffer (occupies the technician and bay).
 - The appointment ID is a `Guid.CreateVersion7()` created by the application before persisting, so a
   write whose outcome is unknown can be checked by ID ([§8](#8-concurrency-and-consistency)).
 
@@ -449,29 +466,22 @@ classDiagram
         +Guid VehicleId
         +Guid ServiceTypeId
         +Guid DealershipId
-        +DateTimeOffset RequestedStart
+        +DateTime RequestedStart
         +string? IdempotencyKey
     }
 
     class ISchedulingReader {
         <<interface>>
         +GetBookingContextAsync(command, ct) Task~BookingContext?~
-        +GetBusyIntervalsAsync(dealershipId, vehicleId, window, ct) Task~BusyIntervals~
+        +GetBusyIntervalsAsync(dealershipId, window, ct) Task~BusyIntervals~
     }
 
     class IAppointmentRepository {
         <<interface>>
         +FindByIdempotencyKeyAsync(key, ct) Task~Appointment?~
         +GetByIdAsync(id, ct) Task~Appointment?~
-        +TryAddAsync(appointment, ct) Task~AddOutcome~
+        +AddAsync(appointment, ct) Task~Result~Appointment~~
         +TryCancelAsync(id, now, ct) Task~CancelOutcome~
-    }
-
-    class AddOutcome {
-        <<union>>
-        Added
-        ResourceConflict(ConflictedResource)
-        DuplicateIdempotencyKey
     }
 
     class BookingOptions {
@@ -487,13 +497,13 @@ classDiagram
     }
     class AppointmentRepository {
         -SchedulingDbContext db
-        -TranslateConflict(PostgresException) AddOutcome
+        -ToConflictError(constraintName) DomainError?
         -ExistsAsync(id, ct) Task~bool~
     }
     class SchedulingDbContext {
-        +DbSet~Appointment~ Appointments
-        +DbSet~Dealership~ Dealerships
-        +DbSet~ServiceType~ ServiceTypes
+        +DbSet~AppointmentRow~ Appointments
+        +DbSet~DealershipRow~ Dealerships
+        +DbSet~ServiceTypeRow~ ServiceTypes
     }
 
     BookAppointmentHandler ..> BookAppointmentCommand : handles
@@ -501,7 +511,6 @@ classDiagram
     BookAppointmentHandler --> IAppointmentRepository
     BookAppointmentHandler --> BookingOptions
     GetAvailabilityHandler --> ISchedulingReader
-    IAppointmentRepository ..> AddOutcome : returns
     SchedulingReader ..|> ISchedulingReader
     AppointmentRepository ..|> IAppointmentRepository
     SchedulingReader --> SchedulingDbContext
@@ -532,13 +541,12 @@ erDiagram
     DEALERSHIPS {
         uuid id PK
         text name
-        text time_zone "IANA, e.g. Europe/London"
     }
     OPENING_HOURS {
         uuid dealership_id PK, FK
         smallint day_of_week PK "0 = Sunday; no row = closed"
-        time opens_at "local time"
-        time closes_at "local time, > opens_at"
+        time opens_at
+        time closes_at "> opens_at"
     }
     SERVICE_BAYS {
         uuid id PK
@@ -560,8 +568,8 @@ erDiagram
     TECHNICIAN_SHIFTS {
         uuid technician_id PK, FK
         smallint day_of_week PK "no row = off"
-        time starts_at "local time"
-        time ends_at "local time, > starts_at"
+        time starts_at
+        time ends_at "> starts_at"
     }
     SERVICE_TYPES {
         uuid id PK
@@ -594,14 +602,14 @@ erDiagram
         uuid service_type_id FK
         uuid technician_id FK "with dealership_id"
         uuid service_bay_id FK "with dealership_id"
-        timestamptz start_utc
-        timestamptz end_utc "start + duration (service)"
-        timestamptz blocked_until_utc "end + buffer"
+        timestamp start_at
+        timestamp end_at "start + duration (service)"
+        timestamp blocked_until "end + buffer"
         text status "Confirmed | Cancelled"
         text idempotency_key UK "nullable"
         text request_hash "SHA-256 of the request"
-        timestamptz created_at_utc
-        timestamptz cancelled_at_utc "nullable"
+        timestamp created_at
+        timestamp cancelled_at "nullable"
     }
 ```
 
@@ -611,11 +619,20 @@ erDiagram
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 ALTER TABLE appointments
-  ADD CONSTRAINT ck_appointments_interval CHECK (end_utc > start_utc AND blocked_until_utc >= end_utc),
+  ADD CONSTRAINT ck_appointments_interval CHECK (end_at > start_at AND blocked_until >= end_at),
   ADD CONSTRAINT ck_appointments_status   CHECK (status IN ('Confirmed', 'Cancelled'));
 
-ALTER TABLE opening_hours     ADD CONSTRAINT ck_opening_hours_range     CHECK (closes_at > opens_at);
-ALTER TABLE technician_shifts ADD CONSTRAINT ck_technician_shifts_range CHECK (ends_at > starts_at);
+ALTER TABLE opening_hours     ADD CONSTRAINT ck_opening_hours_range     CHECK (closes_at > opens_at AND closes_at < '24:00');
+ALTER TABLE opening_hours     ADD CONSTRAINT ck_opening_hours_day       CHECK (day_of_week BETWEEN 0 AND 6);
+ALTER TABLE technician_shifts ADD CONSTRAINT ck_technician_shifts_range CHECK (ends_at > starts_at AND ends_at < '24:00');
+ALTER TABLE technician_shifts ADD CONSTRAINT ck_technician_shifts_day   CHECK (day_of_week BETWEEN 0 AND 6);
+
+ALTER TABLE service_bays  ADD CONSTRAINT ck_service_bays_type
+  CHECK (bay_type IN ('Standard', 'Lift', 'Alignment', 'EV'));
+ALTER TABLE service_types ADD CONSTRAINT ck_service_types_required_bay_type
+  CHECK (required_bay_type IN ('Standard', 'Lift', 'Alignment', 'EV'));
+ALTER TABLE service_types ADD CONSTRAINT ck_service_types_minutes
+  CHECK (duration_minutes > 0 AND buffer_minutes >= 0);
 
 -- A technician or bay can only be assigned within its own dealership.
 ALTER TABLE technicians  ADD CONSTRAINT uq_technicians_id_dealership  UNIQUE (id, dealership_id);
@@ -630,15 +647,15 @@ ALTER TABLE appointments
 -- '[)' = half-open, so 10:00-11:00 and 11:00-12:00 do not conflict.
 -- Technician and bay are blocked until the buffer ends; the vehicle only for the service itself.
 ALTER TABLE appointments ADD CONSTRAINT ex_appointments_technician_overlap
-  EXCLUDE USING gist (technician_id WITH =, tstzrange(start_utc, blocked_until_utc, '[)') WITH &&)
+  EXCLUDE USING gist (technician_id WITH =, tsrange(start_at, blocked_until, '[)') WITH &&)
   WHERE (status = 'Confirmed');
 
 ALTER TABLE appointments ADD CONSTRAINT ex_appointments_bay_overlap
-  EXCLUDE USING gist (service_bay_id WITH =, tstzrange(start_utc, blocked_until_utc, '[)') WITH &&)
+  EXCLUDE USING gist (service_bay_id WITH =, tsrange(start_at, blocked_until, '[)') WITH &&)
   WHERE (status = 'Confirmed');
 
 ALTER TABLE appointments ADD CONSTRAINT ex_appointments_vehicle_overlap
-  EXCLUDE USING gist (vehicle_id WITH =, tstzrange(start_utc, end_utc, '[)') WITH &&)
+  EXCLUDE USING gist (vehicle_id WITH =, tsrange(start_at, end_at, '[)') WITH &&)
   WHERE (status = 'Confirmed');
 
 -- Idempotent retries: a key can create at most one appointment.
@@ -647,7 +664,11 @@ CREATE UNIQUE INDEX ux_appointments_idempotency_key
 
 -- Availability for one dealership-day.
 CREATE INDEX ix_appointments_dealership_start
-  ON appointments (dealership_id, start_utc) WHERE status = 'Confirmed';
+  ON appointments (dealership_id, start_at) WHERE status = 'Confirmed';
+
+-- Every booking loads a dealership's technicians and bays.
+CREATE INDEX ix_technicians_dealership_id ON technicians (dealership_id);
+CREATE INDEX ix_service_bays_dealership_id ON service_bays (dealership_id);
 ```
 
 | Rule | Enforced by | Error surfaced |
@@ -663,13 +684,22 @@ Design notes:
 
 - Each exclusion constraint creates a **GiST index** that also speeds up the overlap queries used by
   availability, so no extra index is needed for them.
-- `start_utc` / `end_utc` are `timestamptz`, always UTC. Local time appears only in `opening_hours`
-  and `technician_shifts` (`time` columns interpreted in the dealership's zone).
-- `end_utc` and `blocked_until_utc` are **stored**, not computed from the service type, so changing a
+- `start_at` / `end_at` are `timestamp` columns: plain times on one clock, with no zone (ADR-0002 #25).
+- `end_at` and `blocked_until` are **stored**, not computed from the service type, so changing a
   service type never rewrites history.
 - `time` columns accept `24:00` in PostgreSQL but .NET `TimeOnly` cannot represent it; the `CHECK`
-  constraints (`closes_at > opens_at`) make such rows impossible, so ranges never cross midnight.
+  constraints (`closes_at < '24:00'`) make such rows impossible, and `closes_at > opens_at` means ranges never cross midnight.
+- EF Core maps persistence row classes (`Persistence/Rows`), not domain types, so the Domain stays free of EF Core.
 - Personal data is confined to `customers`; logs reference IDs only.
+- Every foreign key is `ON DELETE RESTRICT`. EF Core would otherwise cascade required relationships, so
+  deleting a customer would silently delete their appointments.
+- Customers, vehicles and service types are shared across dealerships (ADR-0002 #23). `appointments.customer_id`
+  has no composite foreign key to the vehicle's owner, because it records who booked at that time and a
+  vehicle can later change owner (ADR-0002 #24).
+- **The first migration** creates everything above, including the exclusion constraints, except
+  `idempotency_key`, `request_hash`, `cancelled_at` and `ux_appointments_idempotency_key`, which arrive
+  with idempotency and cancellation. `status`, `blocked_until` and `buffer_minutes` are there from the
+  start because the constraints depend on them.
 
 ---
 
@@ -689,7 +719,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Advisor->>EP: POST /api/appointments (Idempotency-Key header)
-    EP->>EP: Shape validation (required fields, offset present, key length)
+    EP->>EP: Shape validation (required fields, key length)
     EP->>H: HandleAsync(command, ct)
 
     opt Idempotency-Key present
@@ -710,32 +740,33 @@ sequenceDiagram
         H-->>EP: NotFound
         EP-->>Advisor: 404 ProblemDetails (stop)
     end
-    H->>H: Validate in order: vehicle owner, service offered, past, horizon, grid, opening hours
-    H->>RD: GetBusyIntervalsAsync(dealership, vehicle, window)
-    RD->>DB: Busy intervals of candidates (this dealership) and of the vehicle (all dealerships)
+    H->>H: Validate in order: vehicle owner, service offered, past, horizon (parked), grid, opening hours
     H->>H: Vehicle free for the service interval? Otherwise VehicleAlreadyBooked
     H->>H: id = Guid.CreateVersion7()
 
     loop Up to MaxAllocationAttempts (3)
+        H->>RD: GetBusyIntervalsAsync(dealership, whole date), read again on every attempt
+        RD->>DB: Busy intervals of this dealership's technicians and bays
         H->>AL: Allocate(slot, candidates, busy, excluded)
         alt No eligible pair
             AL-->>H: NoQualifiedTechnicianAvailable or NoCompatibleBayAvailable
         else Pair found
             AL-->>H: Allocation(bay, technician)
-            H->>RP: TryAddAsync(Appointment.Book(id, ...))
+            H->>RP: AddAsync(Appointment.Book(id, ...))
+            RP->>DB: BEGIN, then lock technician row, then bay row (FOR NO KEY UPDATE)
             RP->>DB: INSERT INTO appointments
             alt Insert succeeds
-                DB-->>RP: committed
-                RP-->>H: Added
+                DB-->>RP: COMMIT
+                RP-->>H: Success(appointment)
             else Exclusion violation 23P01 on technician or bay
-                DB-->>RP: constraint name identifies the resource
-                RP-->>H: ResourceConflict(resource)
-                H->>H: Exclude resource, record retry metric, try again
+                DB-->>RP: constraint name identifies the resource, then ROLLBACK
+                RP-->>H: Failure(capacity error for that resource)
+                H->>H: Exclude that technician or bay, try again (retry metric: planned)
             else Exclusion violation 23P01 on vehicle
-                RP-->>H: ResourceConflict(vehicle), no retry
+                RP-->>H: Failure(VehicleAlreadyBooked), no retry
             else Connection lost, commit outcome unknown
                 RP->>DB: SELECT 1 WHERE id = id
-                RP-->>H: Added if the row exists, otherwise rethrow
+                RP-->>H: Success(appointment) if the row exists, otherwise rethrow
             end
         end
     end
@@ -778,12 +809,14 @@ sequenceDiagram
     API2->>DB: Read busy intervals
     Note over API1,API2: Both see technician Alice and Bay-1 as free
 
-    API1->>DB: INSERT (Alice, Bay-1, 10:00-11:00)
-    API2->>DB: INSERT (Alice, Bay-1, 10:00-11:00)
-    DB-->>API1: Committed
-    DB-->>API2: 23P01 ex_appointments_technician_overlap
+    API1->>DB: BEGIN, then lock Alice, then Bay-1
+    API2->>DB: BEGIN, then lock Alice (waits for API1)
+    API1->>DB: INSERT (Alice, Bay-1, 10:00-11:00), then COMMIT
+    Note over API2,DB: Lock granted, so API2 now sees API1's committed row
+    API2->>DB: lock Bay-1, then INSERT (Alice, Bay-1, 10:00-11:00)
+    DB-->>API2: 23P01 ex_appointments_technician_overlap, then ROLLBACK
 
-    API2->>API2: Exclude Alice, re-run allocation
+    API2->>API2: Exclude Alice, read busy intervals again, re-run allocation
     alt Another qualified technician and bay are free
         API2->>DB: INSERT (Bob, Bay-2, 10:00-11:00)
         DB-->>API2: Committed
@@ -808,12 +841,12 @@ sequenceDiagram
 
     Advisor->>EP: GET /api/dealerships/{id}/availability?serviceTypeId&date
     EP->>H: HandleAsync(query, ct)
-    H->>H: date not in the past, within the horizon (else 422)
+    H->>H: date not in the past, within the horizon (parked) (else 422)
     H->>RD: Opening hours, qualified technicians, compatible bays
     RD->>DB: Reference data (AsNoTracking)
     H->>RD: Busy intervals for that dealership-day
     RD->>DB: One range query using the GiST index
-    H->>H: Generate starts in elapsed 15-min steps, mapped to local time, keep those after now whose service fits opening hours
+    H->>H: Generate starts in 15-min steps, keep those after now whose service fits opening hours
     loop Each candidate start (in memory, no extra queries)
         H->>AL: Allocate(slot, candidates, busy)
     end
@@ -833,10 +866,11 @@ and the database constraint has the final word.
 |---|---|---|
 | Double-booking under concurrent requests | PostgreSQL exclusion constraints ([§6.2](#62-constraints-and-indexes-that-carry-business-rules)) | Correct for any number of API instances and any future code path; see [ADR-0001](adr/0001-database-enforces-no-double-booking.md) for rejected alternatives |
 | Losing a race | Translate `23P01` → exclude the conflicted resource → re-allocate (max 3) | The advisor still gets a booking when capacity exists elsewhere |
+| Many conflicting inserts at once deadlock (`40P01`) in the exclusion check | The insert's transaction first locks the technician row, then the bay row (`FOR NO KEY UPDATE`, fixed order) | Contenders queue, so each loser gets a clean `23P01` instead of a `500`; the constraint still decides (ADR-0001) |
 | Client retries after a timeout | `Idempotency-Key` + unique partial index + request hash | Exactly-once booking from the client's view |
 | Two concurrent requests with the same key | Second insert hits `23505` → load and return the first | No duplicate, no error for a legitimate retry |
 | Commit succeeded but the acknowledgement was lost | App-generated UUID v7; on an unknown outcome, check whether the row exists before retrying or failing | Without it, the retried INSERT collides with its own row and reports a false `409` (EF Core's documented commit-failure problem) |
-| Concurrent cancels | One atomic conditional update: `UPDATE … SET status = 'Cancelled' WHERE id = @id AND status = 'Confirmed' AND start_utc > @now`; 0 rows → load to decide `200` / `404` / `409` | Race-free without a row version; repeated cancels are idempotent |
+| Concurrent cancels | One atomic conditional update: `UPDATE … SET status = 'Cancelled' WHERE id = @id AND status = 'Confirmed' AND start_at > @now`; 0 rows → load to decide `200` / `404` / `409` | Race-free without a row version; repeated cancels are idempotent |
 | Cross-dealership assignment by a bug | Composite foreign keys `(technician_id, dealership_id)`, `(service_bay_id, dealership_id)` | The database guards tenant boundaries, as it does overlap |
 | Transaction scope | One short transaction per insert; no I/O to other systems inside it | Minimises lock time and contention |
 | Isolation level | PostgreSQL default `READ COMMITTED` | Sufficient because the constraint, not the read, guarantees correctness |
@@ -845,21 +879,21 @@ and the database constraint has the final word.
 
 ## 9. API contract
 
-Full contract: OpenAPI document generated by the API (`/openapi/v1.json`).
+The API generates its OpenAPI 3.1 document at `/openapi/v1.json`, in every environment (docker compose runs as Production). The document lists only the routes that are built.
 
-| Method | Route | Success | Errors |
-|---|---|---|---|
-| `POST` | `/api/appointments` | `201` + `Location` | `400`, `404`, `409`, `422` |
-| `GET` | `/api/appointments/{id}` | `200` | `404` |
-| `POST` | `/api/appointments/{id}/cancel` | `200` (also when already cancelled) | `404`, `409` |
-| `GET` | `/api/dealerships/{id}/availability?serviceTypeId=&date=` | `200` | `400`, `404`, `422` |
-| `GET` | `/health/live`, `/health/ready` | `200` | `503` |
+| Method | Route | Success | Errors | Status |
+|---|---|---|---|---|
+| `POST` | `/api/appointments` | `201` + `Location` | `400`, `404`, `409`, `422` | **Built** |
+| `GET` | `/api/appointments/{id}` | `200` | `404` | Target design, parked |
+| `POST` | `/api/appointments/{id}/cancel` | `200` (also when already cancelled) | `404`, `409` | Target design, parked |
+| `GET` | `/api/dealerships/{id}/availability?serviceTypeId=&date=` | `200` | `400`, `404`, `422` | Target design, parked |
+| `GET` | `/health/live`, `/health/ready` | `200` | `503` | Target design, parked |
 
 **Request**
 
 ```http
 POST /api/appointments
-Idempotency-Key: 7d0f6a52-5c1e-4f0e-9a2b-3f4c2d1e0b9a
+Idempotency-Key: 7d0f6a52-5c1e-4f0e-9a2b-3f4c2d1e0b9a   (idempotency: target design, parked)
 Content-Type: application/json
 
 {
@@ -867,7 +901,7 @@ Content-Type: application/json
   "vehicleId": "v9b8...",
   "serviceTypeId": "s-oil-change",
   "dealershipId": "d-riverside",
-  "requestedStart": "2026-11-03T10:00:00+00:00"
+  "requestedStart": "2026-11-03T10:00:00"
 }
 ```
 
@@ -877,9 +911,12 @@ Content-Type: application/json
 {
   "id": "a3f1...",
   "status": "Confirmed",
-  "startUtc": "2026-11-03T10:00:00Z",
-  "endUtc": "2026-11-03T11:00:00Z",
-  "localStart": "2026-11-03T10:00:00+00:00",
+  "customerId": "c1a2...",
+  "vehicleId": "v9b8...",
+  "serviceTypeId": "s-oil-change",
+  "dealershipId": "d-riverside",
+  "start": "2026-11-03T10:00:00",
+  "end": "2026-11-03T11:00:00",
   "technician": { "id": "t-alice", "name": "Alice" },
   "serviceBay": { "id": "b-1", "name": "Bay-1", "type": "Standard" }
 }
@@ -893,7 +930,7 @@ Content-Type: application/json
   "title": "No qualified technician is available for the whole service duration.",
   "status": 409,
   "code": "NoQualifiedTechnicianAvailable",
-  "alternatives": ["2026-11-03T11:00:00Z", "2026-11-03T16:15:00Z", "2026-11-04T08:00:00Z"],
+  "alternatives": ["2026-11-03T11:00:00", "2026-11-03T16:15:00", "2026-11-04T08:00:00"],
   "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 }
 ```
@@ -902,9 +939,9 @@ Content-Type: application/json
 
 | Error | HTTP | Meaning for the advisor |
 |---|---|---|
-| Shape errors (missing field, no offset on `requestedStart`, bad `Idempotency-Key`) | 400 | Fix the request |
+| Shape errors (missing field, bad `Idempotency-Key`) | 400 | Fix the request |
 | `NotFound` | 404 | Wrong ID |
-| `VehicleNotOwnedByCustomer`, `ServiceNotOfferedAtDealership`, `StartInPast`, `BeyondBookingHorizon`, `StartNotOnGrid`, `OutsideOpeningHours`, `IdempotencyKeyReused` | 422 | This request can never succeed as sent |
+| `VehicleNotOwnedByCustomer`, `ServiceNotOfferedAtDealership`, `StartInPast`, `BeyondBookingHorizon` (parked), `StartNotOnGrid`, `OutsideOpeningHours`, `IdempotencyKeyReused` | 422 | This request can never succeed as sent |
 | `NoQualifiedTechnicianAvailable`, `NoCompatibleBayAvailable`, `VehicleAlreadyBooked`, `AppointmentAlreadyStarted` | 409 | Conflicts with the current state; pick another time |
 
 ---
@@ -915,7 +952,7 @@ Content-Type: application/json
 |---|---|---|---|
 | Runtime | **.NET 10 (LTS)** | Long-term support, high performance, built-in OpenAPI, validation, `TimeProvider`, ProblemDetails | .NET 8 (older LTS); Node/Java (less aligned with the author's experience) |
 | API style | **ASP.NET Core minimal APIs** | Low ceremony, `TypedResults` give accurate OpenAPI, route groups for cross-cutting policies | MVC controllers (more boilerplate for a small surface) |
-| Database | **PostgreSQL 16** | Exclusion constraints + `tstzrange` express "no overlap" natively; strong concurrency semantics; managed options on every cloud | SQL Server (no exclusion constraints; would need serializable transactions or locking); document stores (no cross-document constraints) |
+| Database | **PostgreSQL 16** | Exclusion constraints + `tsrange` express "no overlap" natively; strong concurrency semantics; managed options on every cloud | SQL Server (no exclusion constraints; would need serializable transactions or locking); document stores (no cross-document constraints) |
 | Data access | **EF Core 10 + Npgsql** | Migrations, LINQ projections, `ExecuteUpdateAsync` for atomic conditional updates, first-class PostgreSQL support | Dapper (more control but hand-written mapping and migrations) |
 | Architecture | **Clean Architecture + DDD tactical patterns** | Business rules isolated and unit-testable; infrastructure replaceable | Single-project vertical slices (faster to start, weaker boundaries for this rule-heavy domain) |
 | Testing | **xUnit + Testcontainers (PostgreSQL)** | Integration tests exercise the real constraints and concurrency behaviour | EF InMemory/SQLite (cannot reproduce exclusion constraints, so tests would prove nothing) |
@@ -928,10 +965,22 @@ Content-Type: application/json
 
 ### Logs
 
-- Structured JSON (message templates; `[LoggerMessage]` source generator on hot paths).
-- Business events at `Information`: `AppointmentBooked`, `BookingRejected {Reason}`, `AppointmentCancelled`.
-- Allocation retry after a constraint violation at `Warning` (signals contention).
-- Personal data never logged; IDs and VINs only. Every entry carries `TraceId`/`SpanId`.
+**Built (step 4 logging, EC-79 to EC-82):**
+
+- Business events at `Information`, written by the booking endpoint with `[LoggerMessage]`:
+  - `AppointmentBooked` with `AppointmentId`, `DealershipId`, `TechnicianId` and `ServiceBayId`;
+  - `BookingRejected` with `DealershipId` and `Reason` (the error code).
+- One `IExceptionHandler` logs an unexpected exception once at `Error` (`UnhandledRequestException`, with method and
+  path) and returns a generic `500` ProblemDetails with a `traceId` and no exception details, in every environment.
+- A malformed body is a `400` problem and is not logged above `Information`.
+- Personal data is never logged: IDs and error codes only.
+
+**Planned:**
+
+- Structured JSON output.
+- `AppointmentCancelled`.
+- Allocation retry at `Warning`.
+- `TraceId`/`SpanId` on every entry, through OpenTelemetry. Today scopes are off, so console lines carry no trace ID.
 
 ### Traces
 
@@ -970,10 +1019,10 @@ engineering metric.
 | **Horizontal scale** | Stateless API instances; no in-memory locks or sticky sessions; correctness lives in the database |
 | **Query efficiency** | Bounded queries (one dealership-day), projections with `AsNoTracking`, no queries in loops (N+1), GiST indexes for overlap |
 | **Connection management** | Npgsql connection pooling; one `DbContext` per request; short transactions |
-| **Latency budget** | Booking ≈ 3–4 round trips (idempotency lookup, context, busy intervals, insert); target p95 < 200 ms locally |
+| **Latency budget** | Booking = 11 database commands today (9 for the context, busy intervals, insert), a fixed number and not N+1; combine the context reads if the target is missed. Target p95 < 200 ms locally |
 | **Contention** | Hot spots are a single dealership-day; conflicts are resolved by retry on the next candidate, not by global locks |
 | **Reliability** | Transient database errors retried via the EF Core execution strategy; timeouts on all I/O; graceful shutdown drains requests |
-| **Data growth** | Appointments grow linearly per dealership; partition by `start_utc` (monthly) or archive past appointments when needed |
+| **Data growth** | Appointments grow linearly per dealership; partition by `start_at` (monthly) or archive past appointments when needed |
 | **Multi-tenancy** | Every row is scoped by `dealership_id`; an authorisation policy can restrict advisors to their dealerships in one place |
 | **Maintainability** | Clean Architecture boundaries, ADRs for decisions, an edge-case catalogue mapped to tests |
 
