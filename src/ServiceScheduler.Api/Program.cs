@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics;
 
 using ServiceScheduler.Api.Appointments;
 using ServiceScheduler.Api.Errors;
+using ServiceScheduler.Api.Telemetry;
 using ServiceScheduler.Application.Appointments;
 using ServiceScheduler.Domain.Scheduling;
 using ServiceScheduler.Infrastructure.Persistence;
@@ -34,6 +35,7 @@ builder.Services.AddSingleton<ITechnicianAllocationPolicy, BestFitTechnicianPoli
 builder.Services.AddSingleton<SlotAllocator>();
 builder.Services.AddScoped<BookAppointmentHandler>();
 builder.Services.AddSchedulingPersistence(connectionString);
+builder.Services.AddSchedulerTelemetry(builder.Configuration);
 
 WebApplication app = builder.Build();
 

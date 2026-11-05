@@ -230,9 +230,9 @@ flowchart LR
     subgraph local["Local / review: docker compose"]
         apiC["scheduler-api<br/>[Docker container]"]
         pgC[("postgres:16.15<br/>[Docker container]")]
-        aspC["aspire-dashboard<br/>[Docker container, planned with logging]"]
+        aspC["aspire-dashboard<br/>[Docker container]"]
         apiC --> pgC
-        apiC -.-> aspC
+        apiC --> aspC
     end
     subgraph azure["Target production (illustrative): Azure"]
         aca["Azure Container Apps<br/>N x scheduler-api"]
@@ -761,7 +761,7 @@ sequenceDiagram
             else Exclusion violation 23P01 on technician or bay
                 DB-->>RP: constraint name identifies the resource, then ROLLBACK
                 RP-->>H: Failure(capacity error for that resource)
-                H->>H: Exclude that technician or bay, try again (retry metric: planned)
+                H->>H: Exclude that technician or bay, try again, count the retry
             else Exclusion violation 23P01 on vehicle
                 RP-->>H: Failure(VehicleAlreadyBooked), no retry
             else Connection lost, commit outcome unknown
@@ -980,33 +980,43 @@ Content-Type: application/json
 - Structured JSON output.
 - `AppointmentCancelled`.
 - Allocation retry at `Warning`.
-- `TraceId`/`SpanId` on every entry, through OpenTelemetry. Today scopes are off, so console lines carry no trace ID.
+- Trace ID on **console** lines: OTLP logs carry it, the console does not (scopes off).
 
-### Traces
+**Built (step 10):** logs are also exported over OTLP with their trace ID, so a log line links to its trace in the dashboard.
+
+### Export
+
+**Built (step 10, EC-92 to EC-96).** OpenTelemetry SDK in the API, service name `service-scheduler`. Logs, traces and metrics are
+exported over OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; tests and plain local runs export nothing. Recording is in-memory
+and export runs on a background batch, so a booking never waits for telemetry. `docker-compose.yml` runs the **Aspire Dashboard**
+(`http://localhost:18888`), which keeps the data in memory for the demo. In production the same OTLP export points at a durable
+backend (Azure Monitor, Grafana stack, Datadog) without code changes.
+
+### Traces (built)
 
 | Span | Source | Key attributes |
 |---|---|---|
 | `POST /api/appointments` | ASP.NET Core instrumentation | `http.response.status_code` |
 | `booking.allocate` | `ActivitySource("ServiceScheduler")` | `attempt`, `outcome` |
-| `booking.persist` | `ActivitySource("ServiceScheduler")` | `outcome` (`added`, `conflict:technician`, …) |
-| SQL statements | Npgsql instrumentation | `db.statement` (parameterised) |
+| `booking.persist` | `ActivitySource("ServiceScheduler")` | `attempt`, `outcome` (`added`, `conflict:technician`, `conflict:bay`, `conflict:vehicle`) |
+| SQL statements | Npgsql instrumentation | `db.query.text` (parameterised), `db.operation.name` |
 
-### Metrics
+### Metrics (built)
 
 | Metric | Type | Tags | Question it answers |
 |---|---|---|---|
 | `scheduler.bookings.created` | Counter | `dealership_id`, `service_type` | How much work is being booked? |
 | `scheduler.bookings.rejected` | Counter | `reason` | Are we short of technicians, bays, or opening hours? |
-| `scheduler.booking.allocation_retries` | Counter | `resource` | How much real contention exists? |
+| `scheduler.booking.allocation_retries` | Counter | (none) | How much real contention exists? |
 | `scheduler.booking.duration` | Histogram (ms) | `outcome` | Is booking latency within target? |
-| HTTP and runtime metrics | Built-in | Standard | Error rate, throughput, GC, thread pool |
+| HTTP server metrics | ASP.NET Core instrumentation | Standard | Error rate, throughput, request duration. Runtime metrics (GC, thread pool) are planned |
 
-A rising `rejected{reason="no_technician"}` is a staffing signal for workshop managers, not just an
+A rising `rejected{reason="NoQualifiedTechnicianAvailable"}` is a staffing signal for workshop managers, not just an
 engineering metric.
 
 ### Health and alerting
 
-- `/health/live` (process) and `/health/ready` (database reachable) for orchestrator probes.
+- `/health/live` (process) and `/health/ready` (database reachable) for orchestrator probes (planned, not built).
 - Suggested alerts: p95 booking latency > 500 ms; 5xx rate > 1 %; readiness failing; sustained
   allocation retries (contention or a stale availability view).
 

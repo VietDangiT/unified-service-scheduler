@@ -35,6 +35,19 @@ services:
       Database__ApplyMigrationsOnStartup: "true"
       # "Now" is this clock (ADR-0002 #25). Override with TZ=<IANA zone> docker compose up.
       TZ: ${TZ:-UTC}
+      # Logs, traces and metrics go to the dashboard over OTLP (gRPC). Without this variable nothing is exported.
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
+
+  # Traces, metrics and structured logs of the API: open http://localhost:18888.
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6.2
+    ports:
+      # The UI only, on loopback. The OTLP endpoint (18889) stays on the compose network.
+      - "127.0.0.1:18888:18888"
+    environment:
+      # Local demo: no login for the UI and no API key for OTLP. Never expose it like this beyond loopback.
+      DASHBOARD__FRONTEND__AUTHMODE: "Unsecured"
+      DASHBOARD__OTLP__AUTHMODE: "Unsecured"
 
 volumes:
   postgres-data:

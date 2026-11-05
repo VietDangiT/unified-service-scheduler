@@ -156,6 +156,9 @@ internal sealed class SchedulingDataBuilder
         return data;
     }
 
+    /// <summary>The code a service type is stored with: unique across the database because it carries the ID.</summary>
+    public static string ServiceTypeCodeOf(Guid serviceTypeId) => $"service-{serviceTypeId:N}";
+
     // Sorted with the same comparer the allocator's ID tie-break uses: two version 7 IDs made in the same millisecond
     // are not ordered by creation.
     private static Guid[] AscendingIds(int count) =>
@@ -201,7 +204,7 @@ internal sealed class SchedulingDataBuilder
             connection,
             transaction);
         command.Parameters.AddWithValue("id", serviceTypeId);
-        command.Parameters.AddWithValue("code", $"service-{serviceTypeId:N}");
+        command.Parameters.AddWithValue("code", ServiceTypeCodeOf(serviceTypeId));
         command.Parameters.AddWithValue("name", serviceType.Name);
         command.Parameters.AddWithValue("duration", serviceType.DurationMinutes);
         command.Parameters.AddWithValue("skill", serviceType.RequiredSkill);
@@ -360,6 +363,9 @@ internal sealed record SchedulingData(
 {
     /// <summary>The default oil change.</summary>
     public Guid ServiceTypeId => ServiceTypeIdOf(SchedulingDataBuilder.OilChange);
+
+    /// <summary>The code of the default oil change.</summary>
+    public string ServiceTypeCode => SchedulingDataBuilder.ServiceTypeCodeOf(ServiceTypeId);
 
     /// <summary>The first customer: the only one unless the test added more.</summary>
     public CreatedCustomer Customer => Customers[0];

@@ -32,7 +32,10 @@ public sealed class SchedulingReader(SchedulingDbContext db) : ISchedulingReader
             ToServiceType(serviceType),
             ToDealership(dealership),
             dealership.Technicians.ToDictionary(row => new TechnicianId(row.Id), row => row.Name),
-            dealership.ServiceBays.ToDictionary(row => new ServiceBayId(row.Id), row => row.Name));
+            dealership.ServiceBays.ToDictionary(row => new ServiceBayId(row.Id), row => row.Name))
+        {
+            ServiceTypeCode = serviceType.Code,
+        };
     }
 
     public async Task<BusyIntervals> GetBusyIntervalsAsync(DealershipId dealershipId, TimeSlot window, CancellationToken cancellationToken)
