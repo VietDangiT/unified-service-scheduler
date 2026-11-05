@@ -40,4 +40,28 @@ public sealed class OpenApiDocumentTests(SchedulingApiFixture fixture) : IClassF
         string[] statuses = [.. post.GetProperty("responses").EnumerateObject().Select(status => status.Name).Order(StringComparer.Ordinal)];
         Assert.Equal(["201", "400", "404", "409", "422"], statuses);
     }
+
+    // EC-97: only the request body is strict. A response or problem schema closed with additionalProperties: false
+    // would make a generated strict client reject our own bodies (a problem carries traceId and code).
+    [Fact]
+    public async Task GetOpenApiDocument_WhenRequested_ClosesOnlyTheBookingRequestToUnknownProperties()
+    {
+        using HttpClient client = fixture.CreateClient();
+
+        using HttpResponseMessage response = await client.GetAsync(new Uri(DocumentPath, UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+        Assert.True(ForbidsAdditionalProperties(schemas, "BookAppointmentRequest"), "BookAppointmentRequest must forbid additional properties.");
+        Assert.False(ForbidsAdditionalProperties(schemas, "AppointmentResponse"), "AppointmentResponse must not forbid additional properties.");
+        Assert.False(ForbidsAdditionalProperties(schemas, "ProblemDetails"), "ProblemDetails must not forbid additional properties.");
+    }
+
+    private static bool ForbidsAdditionalProperties(JsonElement schemas, string schemaName)
+    {
+        Assert.True(schemas.TryGetProperty(schemaName, out JsonElement schema), $"The schema {schemaName} is missing.");
+        return schema.TryGetProperty("additionalProperties", out JsonElement additional)
+            && additional.ValueKind == JsonValueKind.False;
+    }
 }

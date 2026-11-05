@@ -1,6 +1,12 @@
 using System.Globalization;
 using System.Net;
+using System.Text;
 using System.Text.Json;
+
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 using ServiceScheduler.IntegrationTests.Fixtures;
 
@@ -254,5 +260,42 @@ public sealed class BookingRequestTests(SchedulingApiFixture fixture) : IClassFi
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         StoredAppointment row = Assert.Single(await fixture.ReadAppointmentsAsync());
         Assert.Equal(DateTime.Parse(requestedStart, CultureInfo.InvariantCulture), row.StartAt);
+    }
+
+    // EC-97: a property the contract does not define, the typo "requestStart", either next to a valid requestedStart
+    // (a) or in its place (b). The client's mistake: a 400 problem, nothing stored, nothing logged above Information
+    // (api-conventions.md, Security baseline; errors-logging-observability.md).
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PostAppointment_WhenBodyHasAPropertyTheContractDoesNotDefine_ReturnsBadRequestProblemAndStoresNothing(
+        bool alsoSendsRequestedStart)
+    {
+        SchedulingData data = await new SchedulingDataBuilder().BuildAsync(fixture.ConnectionString);
+        Guid vehicleId = data.Customer.VehicleIds[0];
+        string requestedStart = alsoSendsRequestedStart ? $"\"requestedStart\": \"{TuesdayTen}\"," : string.Empty;
+        string body =
+            $$"""
+            {
+              "customerId": "{{data.Customer.Id}}",
+              "vehicleId": "{{vehicleId}}",
+              "serviceTypeId": "{{data.ServiceTypeId}}",
+              "dealershipId": "{{data.DealershipId}}",
+              {{requestedStart}}
+              "requestStart": "{{TuesdayTen}}"
+            }
+            """;
+        using var logs = new CapturingLoggerProvider();
+        await using WebApplicationFactory<Program> factory = fixture.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services => services.AddSingleton<ILoggerProvider>(logs)));
+        using HttpClient client = factory.CreateClient();
+        using var request = new StringContent(body, Encoding.UTF8, "application/json");
+
+        using HttpResponseMessage response = await client.PostAsync(new Uri("/api/appointments", UriKind.Relative), request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(AppointmentsApi.ProblemMediaType, response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(0, await fixture.CountAppointmentsAsync());
+        Assert.DoesNotContain(logs.Entries, entry => entry.Level > LogLevel.Information);
     }
 }
