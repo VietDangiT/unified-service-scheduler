@@ -43,6 +43,11 @@ Run its requests in order with VS Code REST Client, Rider or Visual Studio, star
 
 The *Riverside* dealership from the first migration is still seeded but unused; tests create their own data.
 
+**Observability.** Compose also starts the Aspire Dashboard at [`http://localhost:18888`](http://localhost:18888). After a booking,
+open *Traces* to see the request split into `booking.allocate`, `booking.persist` and the SQL statements, *Metrics* for
+`scheduler.bookings.created`, `scheduler.bookings.rejected` (by reason), `scheduler.booking.allocation_retries` and
+`scheduler.booking.duration`, and *Structured logs* for `AppointmentBooked` / `BookingRejected` linked to their trace.
+
 Times are plain local times on one clock, with no offset (ADR-0002 #25). "Now" is the API container's clock, which is
 `TZ=UTC` by default. Set `TZ` before `docker compose up` to change it.
 
@@ -70,6 +75,7 @@ is correct because of its own scenario, not because of shared seed data.
 | `ConcurrentBookingTests` | 20 parallel requests: never more bookings than capacity, never a technician or bay twice, no `500` |
 | `StaleBusyIntervalTests` | A request that read the busy intervals before a concurrent save gets `409` from the database constraint, not `500` |
 | `LockOrderRaceTests` | Each lock taken before the insert is needed; without it, concurrent saves deadlock and fail with `500` |
+| `BookingTelemetryTests` | Bookings and rejections are counted with the right tags, timed, and traced as `booking.allocate` and `booking.persist` under the request |
 | `BookingLogTests` | Bookings and rejections are logged as business events with no personal data; an unexpected error is a generic `500`, logged once |
 
 ## API

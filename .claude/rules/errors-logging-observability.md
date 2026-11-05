@@ -32,13 +32,18 @@ paths:
 
 ## Tracing and metrics (OpenTelemetry)
 
-- Instrument ASP.NET Core, HttpClient and Npgsql/EF Core; export via OTLP (Aspire dashboard locally).
+- Instrument ASP.NET Core, Npgsql, and HttpClient when outgoing calls exist; export via OTLP (Aspire dashboard locally).
 - One `ActivitySource` and one `Meter`, both named `ServiceScheduler`. Add spans only around meaningful
   units of work (allocation, persistence retry), with low-cardinality tags.
 - Business metrics:
   - `scheduler.bookings.created` (counter; tags: `dealership_id`, `service_type`)
-  - `scheduler.bookings.rejected` (counter; tag: `reason`, e.g. `no_technician`, `no_bay`, `outside_hours`)
+  - `scheduler.bookings.rejected` (counter; tag: `reason` = the domain error code, e.g. `NoQualifiedTechnicianAvailable`, `OutsideOpeningHours`)
   - `scheduler.booking.allocation_retries` (counter): non-zero shows real contention
-  - `scheduler.booking.duration` (histogram, ms)
+  - `scheduler.booking.duration` (histogram, ms; tag: `outcome` = `created` / `rejected`). It covers requests that end with a
+    result; a request that throws is visible through the 5xx rate and its trace, not this histogram.
+- `scheduler.bookings.rejected` counts every domain error, `NotFound` included; filter by `reason` for capacity only.
+- The Application layer may record metrics and spans with the BCL `System.Diagnostics` types only (no package). One static
+  `Meter` and one static `ActivitySource` per process is the standard, thread-safe pattern; tests that listen to them run in
+  a non-parallel collection.
 - Tags never contain unbounded values (IDs of customers, appointment IDs, timestamps).
 - Health checks: `/health/live` (process up) and `/health/ready` (database reachable).

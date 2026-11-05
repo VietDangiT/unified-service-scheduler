@@ -36,6 +36,7 @@ $TC = "src\ServiceScheduler.Domain\Dealerships\Technician.cs"
 $BT = "src\ServiceScheduler.Domain\Dealerships\BayType.cs"
 $BE = "src\ServiceScheduler.Domain\Scheduling\BookingErrors.cs"
 $H = "src\ServiceScheduler.Application\Appointments\BookAppointmentHandler.cs"
+$TEL = "src\ServiceScheduler.Application\Appointments\BookingTelemetry.cs"
 
 $retryCondition = "if (!IsLostRace(saved.Error) || attempt == SlotAllocator.MaxAllocationAttempts)"
 
@@ -91,6 +92,10 @@ $mutations = @(
     @{ Name = "Lost resource not excluded";             File = $H; Old = "allocationRequest = ExcludeLostResource(allocationRequest, allocation.Value, saved.Error);"; New = "" }
     @{ Name = "Attempts not bounded";                   File = $H; Old = " || attempt == SlotAllocator.MaxAllocationAttempts"; New = "" }
     @{ Name = "Attempts bounded at 1";                  File = $A; Old = "public const int MaxAllocationAttempts = 3;"; New = "public const int MaxAllocationAttempts = 1;" }
+    # Telemetry (step 10). "Created not recorded" and "reason as fixed text" only show through the HTTP tests
+    # (EC-92, EC-93), so they are applied by hand to a copy and recorded in the work package.
+    @{ Name = "Retry counter not incremented";          File = $H; Old = "BookingTelemetry.RecordRetry();"; New = "" }
+    @{ Name = "Persist outcome always added";           File = $TEL; Old = "saved.IsSuccess ? AddedOutcome : ConflictOutcomeOf(saved.Error)"; New = "AddedOutcome" }
 )
 
 $tests = Join-Path $Root "tests\ServiceScheduler.UnitTests"

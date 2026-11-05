@@ -13,4 +13,14 @@ public sealed record BookingContext(
     ServiceType ServiceType,
     Dealership Dealership,
     IReadOnlyDictionary<TechnicianId, string> TechnicianNames,
-    IReadOnlyDictionary<ServiceBayId, string> BayNames);
+    IReadOnlyDictionary<ServiceBayId, string> BayNames)
+{
+    /// <summary>Shown when no code was given; the reader always gives one.</summary>
+    public const string UnknownServiceTypeCode = "unknown";
+
+    /// <summary>
+    /// The service type's stable code, which tags the bookings metric. No rule reads it, so it stays out of the domain
+    /// <see cref="ServiceType"/>.
+    /// </summary>
+    public string ServiceTypeCode { get; init; } = UnknownServiceTypeCode;
+}

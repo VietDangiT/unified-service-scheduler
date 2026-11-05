@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using ServiceScheduler.Domain.Common;
 using ServiceScheduler.Domain.Customers;
 using ServiceScheduler.Domain.Scheduling;
@@ -16,12 +18,34 @@ public sealed class BookAppointmentHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        long started = clock.GetTimestamp();
+
         BookingContext? context = await reader.GetBookingContextAsync(command, cancellationToken);
         if (context is null)
         {
-            return Result.Failure<AppointmentDto>(BookingErrors.NotFound);
+            return Rejected(BookingErrors.NotFound, started);
         }
 
+        Result<AppointmentDto> result = await BookAsync(command, context, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return Rejected(result.Error, started);
+        }
+
+        BookingTelemetry.RecordCreated(context.ServiceTypeCode, result.Value.DealershipId, clock.GetElapsedTime(started));
+        return result;
+    }
+
+    // Every request that ends with a domain error is counted once, with its code as the reason.
+    private Result<AppointmentDto> Rejected(DomainError error, long started)
+    {
+        BookingTelemetry.RecordRejected(error, clock.GetElapsedTime(started));
+        return Result.Failure<AppointmentDto>(error);
+    }
+
+    private async Task<Result<AppointmentDto>> BookAsync(
+        BookAppointmentCommand command, BookingContext context, CancellationToken cancellationToken)
+    {
         DateTime now = clock.GetLocalNow().DateTime;
         var request = new BookingRequest(
             new CustomerId(command.CustomerId),
@@ -45,19 +69,14 @@ public sealed class BookAppointmentHandler(
 
         for (int attempt = 1; ; attempt++)
         {
-            allocationRequest = allocationRequest with
-            {
-                Busy = await reader.GetBusyIntervalsAsync(context.Dealership.Id, busyWindow, cancellationToken),
-            };
-
-            Result<Allocation> allocation = allocator.Allocate(allocationRequest);
+            Result<Allocation> allocation = await AllocateAsync(allocationRequest, busyWindow, attempt, cancellationToken);
             if (!allocation.IsSuccess)
             {
                 return Result.Failure<AppointmentDto>(allocation.Error);
             }
 
             var appointment = Appointment.Book(appointmentId, request, allocation.Value, now);
-            Result<Appointment> saved = await repository.AddAsync(appointment, cancellationToken);
+            Result<Appointment> saved = await PersistAsync(appointment, attempt, cancellationToken);
             if (saved.IsSuccess)
             {
                 return Result.Success(ToDto(saved.Value, context));
@@ -70,8 +89,32 @@ public sealed class BookAppointmentHandler(
                 return Result.Failure<AppointmentDto>(saved.Error);
             }
 
+            BookingTelemetry.RecordRetry();
             allocationRequest = ExcludeLostResource(allocationRequest, allocation.Value, saved.Error);
         }
+    }
+
+    // Busy intervals are read again on every attempt, so a retry sees what it can of the booking that won the race.
+    private async Task<Result<Allocation>> AllocateAsync(
+        AllocationRequest request, TimeSlot busyWindow, int attempt, CancellationToken cancellationToken)
+    {
+        using Activity? span = BookingTelemetry.StartAllocate(attempt);
+
+        BusyIntervals busy = await reader.GetBusyIntervalsAsync(request.Dealership.Id, busyWindow, cancellationToken);
+        Result<Allocation> allocation = allocator.Allocate(request with { Busy = busy });
+
+        BookingTelemetry.EndAllocate(span, allocation);
+        return allocation;
+    }
+
+    private async Task<Result<Appointment>> PersistAsync(Appointment appointment, int attempt, CancellationToken cancellationToken)
+    {
+        using Activity? span = BookingTelemetry.StartPersist(attempt);
+
+        Result<Appointment> saved = await repository.AddAsync(appointment, cancellationToken);
+
+        BookingTelemetry.EndPersist(span, saved);
+        return saved;
     }
 
     // A concurrent booking took the technician or the bay after the busy intervals were read (Allocation policy 3).
