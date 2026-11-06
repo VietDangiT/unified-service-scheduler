@@ -939,7 +939,7 @@ Content-Type: application/json
 
 | Error | HTTP | Meaning for the advisor |
 |---|---|---|
-| Shape errors (missing field, bad `Idempotency-Key`) | 400 | Fix the request |
+| Shape errors (malformed JSON, a property the contract does not define; missing fields and a bad `Idempotency-Key` are parked) | 400 | Fix the request |
 | `NotFound` | 404 | Wrong ID |
 | `VehicleNotOwnedByCustomer`, `ServiceNotOfferedAtDealership`, `StartInPast`, `BeyondBookingHorizon` (parked), `StartNotOnGrid`, `OutsideOpeningHours`, `IdempotencyKeyReused` | 422 | This request can never succeed as sent |
 | `NoQualifiedTechnicianAvailable`, `NoCompatibleBayAvailable`, `VehicleAlreadyBooked`, `AppointmentAlreadyStarted` | 409 | Conflicts with the current state; pick another time |

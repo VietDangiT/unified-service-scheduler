@@ -48,7 +48,8 @@ hash of the request payload; a replay returns the original response.
 ## Security baseline
 
 - No secrets in source or `appsettings.json`; use environment variables / user-secrets.
-- Request size limits stay at framework defaults or lower; reject unknown JSON properties.
+- Request size limits stay at framework defaults or lower. Reject unknown JSON properties on **request** contracts only
+  (attribute on the request type), so response and ProblemDetails schemas in the OpenAPI document stay open.
 - Personal data (customer name, phone, email) is never written to logs.
 - Authentication/authorisation are out of scope for the assessment but endpoints are grouped so a
   policy can be applied in one place (`MapGroup("/api").RequireAuthorization()`).
